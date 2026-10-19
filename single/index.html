@@ -1,0 +1,1901 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Раскладка</title><link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20512%20512%22%3E%3Crect%20width%3D%22512%22%20height%3D%22512%22%20fill%3D%22%232F4A3A%22%2F%3E%3Cpath%20d%3D%22M96%20380%20232%20160l60%2096%2040-56%2084%20180z%22%20fill%3D%22%23F3F5F4%22%2F%3E%3Ccircle%20cx%3D%22360%22%20cy%3D%22150%22%20r%3D%2230%22%20fill%3D%22%232E6FD8%22%2F%3E%3C%2Fsvg%3E%0A">
+<meta name="theme-color" content="#2F4A3A">
+<style>:root {
+  --bg: #F3F5F4; --text: #1D2421; --primary: #2F4A3A; --muted: #5B6168;
+  --accent: #2E6FD8; --warn: #C8741A; --line: #cfd5d2; --on-primary: #F3F5F4;
+}
+:root[data-theme="dark"] {
+  --bg: #161A18; --text: #E6EAE8; --primary: #7FB095; --muted: #9AA1A7;
+  --accent: #6FA3F0; --warn: #E39A4A; --line: #2f3633; --on-primary: #161A18;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+#app { display: flex; flex-direction: column; height: 100%; max-width: 720px; margin: 0 auto; }
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid var(--line);
+  padding-top: calc(12px + env(safe-area-inset-top));
+}
+header h1 { margin: 0; font-size: 20px; color: var(--primary); }
+main { flex: 1; overflow-y: auto; padding: 16px; }
+h2 { margin: 0 0 12px; font-size: 22px; }
+.muted { color: var(--muted); }
+.empty { padding: 24px 0; color: var(--muted); }
+button { font: inherit; cursor: pointer; }
+.btn {
+  background: var(--primary); color: var(--on-primary); border: 0;
+  padding: 12px 20px; border-radius: 6px; font-weight: 600; width: 100%;
+}
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.icon-btn { background: none; border: 0; color: var(--text); font-size: 24px; padding: 4px 8px; }
+nav.tabs { display: flex; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+nav.tabs button {
+  flex: 1; background: none; border: 0; padding: 14px 4px; color: var(--muted);
+  border-top: 3px solid transparent; font-size: 14px;
+}
+nav.tabs button.on { color: var(--primary); border-top-color: var(--primary); font-weight: 700; }
+.subtabs { display: flex; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.subtabs button {
+  flex: 1; background: none; border: 0; padding: 10px; color: var(--muted);
+  border-bottom: 3px solid transparent;
+}
+.subtabs button.on { color: var(--primary); border-bottom-color: var(--primary); font-weight: 700; }
+.list { list-style: none; margin: 0; padding: 0; }
+.list li { padding: 14px 0; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+.list li button { background: none; border: 0; color: inherit; width: 100%; text-align: left; padding: 0; display: flex; justify-content: space-between; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { background: none; border: 0; color: var(--text); padding: 8px 12px; }
+.seg button.on { background: var(--primary); color: var(--on-primary); }
+.welcome { padding: 32px 16px; overflow-y: auto; height: 100%; }
+.welcome h1 { color: var(--primary); margin: 0; }
+label.check { display: flex; gap: 12px; align-items: flex-start; margin: 20px 0; }
+label.check input { width: 22px; height: 22px; margin-top: 2px; }
+.back { background: none; border: 0; color: var(--accent); padding: 0 0 12px; }
+h3 { margin: 20px 0 6px; font-size: 16px; color: var(--primary); }
+.fld { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.fld label { flex: 1; color: var(--muted); }
+.fld .ctl { display: flex; align-items: center; gap: 6px; max-width: 60%; flex-wrap: wrap; justify-content: flex-end; }
+.fld input:not([type=checkbox]), .fld select { font: inherit; color: var(--text); background: transparent; border: 0; border-bottom: 1px solid var(--muted); padding: 4px; width: 120px; text-align: right; }
+.fld input[type=checkbox] { width: 22px; height: 22px; }
+.fld select { background: var(--bg); }
+.unit { font-size: 13px; }
+.q { width: 20px; height: 20px; margin-left: 6px; border-radius: 50%; border: 1px solid var(--accent); color: var(--accent); background: none; font-size: 12px; padding: 0; }
+.help { margin: 4px 0 8px; padding: 8px 10px; border-left: 3px solid var(--accent); font-size: 14px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.chips button { background: none; border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 6px 10px; }
+.chips button.on { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+.seg { flex-wrap: wrap; }
+.btn { margin-top: 12px; }
+.btn.ghost { background: none; color: var(--text); border: 1px solid var(--line); }
+.btn.danger { background: none; color: var(--warn); border: 1px solid var(--warn); }
+.mini { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px; font-size: 12px; padding: 3px 8px; }
+.dot, .dotc { color: var(--warn); }
+.prose { white-space: pre-line; }
+.pv { color: var(--accent); border-bottom: 1px dashed var(--accent); cursor: pointer; font-weight: 600; }
+.drop { border-top: 2px solid var(--line); padding-top: 6px; margin-top: 8px; }
+.drop-zone { border: 1px dashed var(--muted); border-radius: 6px; padding: 16px; text-align: center; }
+.warnmsg { color: var(--warn); }
+.small { font-size: 13px; }
+.two { display: flex; gap: 8px; }
+#prof { touch-action: none; display: block; }
+#prof .area { fill: var(--primary); opacity: .18; }
+#prof .ln { fill: none; stroke: var(--primary); stroke-width: 1.5; }
+#prof .mk line { stroke: var(--accent); stroke-width: 2; }
+#prof .mk circle { fill: var(--accent); cursor: ew-resize; }
+.search { width: 100%; font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--text); }
+.plist li { padding: 6px 0; gap: 8px; justify-content: flex-start; }
+.sw input { width: 22px; height: 22px; }
+.plist li > button { flex: 1; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin: 8px 0; }
+.metrics > div, .nums > div { display: flex; flex-direction: column; }
+.big { font-size: 22px; font-weight: 700; line-height: 1.2; }
+.good { color: var(--primary); } .bad { color: var(--warn); }
+.dcard { border-top: 2px solid var(--line); padding: 12px 0; }
+.dh { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+.nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin: 10px 0; }
+.warnlist { color: var(--warn); padding-left: 18px; }
+details summary { color: var(--accent); cursor: pointer; padding: 4px 0; }
+.tbl { overflow-x: auto; } .tbl table { border-collapse: collapse; font-size: 13px; } .tbl td, .tbl th { padding: 3px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; } .tbl th { color: var(--muted); font-weight: 500; }
+.meals { display: grid; grid-template-columns: 1fr; margin-top: 8px; }
+.meal { display: flex; flex-direction: column; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); color: var(--text); padding: 8px 0; }
+.mh { color: var(--primary); font-weight: 600; font-size: 13px; } .mn { font-weight: 500; }
+.shop li { display: block; } .shop li label { display: flex; gap: 12px; align-items: flex-start; } .shop li input { width: 22px; height: 22px; margin-top: 2px; } .shop li.done { opacity: .5; text-decoration: line-through; }
+.bigfont { font-size: 20px; } .bigfont .small { font-size: 16px; }
+.pk { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.filebtn { display: block; text-align: center; cursor: pointer; }
+@media print { header, nav.tabs, .subtabs, .btn, .two, .back { display: none !important; } body, main { overflow: visible !important; height: auto !important; } #app { height: auto; max-width: none; } }
+.subtabs { overflow-x: auto; }
+.subtabs button { flex: 1 0 auto; padding: 10px 12px; white-space: nowrap; }
+</style></head>
+<body><div id="app"></div>
+<script>
+const __m = {};
+__m['defaults.js'] = (() => {
+// Все числа и версии приложения. Каждый параметр расчёта: id, группа, название, единица, значение по умолчанию, подсказка.
+// Меняются в Настройках → Параметры расчёта. Новые этапы добавляют свои параметры сюда же.
+const APP_VERSION = '1.0';
+const TERMS_VERSION = '1';
+const DB_NAME = 'raskladka';
+const DB_VERSION = 1;
+
+const GROUPS = [
+  ['walk', 'Ходьба'], ['cover', 'Покрытие'], ['day', 'Сутки'], ['alt', 'Высота'], ['food', 'Раскладка'], ['menu', 'Меню'], ['fuel', 'Топливо и вода'],
+];
+
+const P = (id, group, label, unit, def, hint = '') => ({ id, group, label, unit, def, hint });
+
+const PARAMS = [
+  P('pandolf_corr', 'walk', 'Поправка на недооценку Пандольфа', '×', 1.2),
+  P('kcal_per_wh', 'walk', 'Перевод ватт-часов в ккал', 'ккал/Вт·ч', 0.86),
+  P('slope_clip', 'walk', 'Предел уклона', '%', 40, 'Уклон ограничивается диапазоном от −предел до +предел.'),
+  P('seg_step', 'walk', 'Шаг участка трека', 'м', 75, 'Расчёт идёт по участкам такой длины (50–100 м).'),
+  P('tobler_base', 'walk', 'Базовая скорость по Тоблеру', 'км/ч', 5, 'Скорость по ровному месту с рюкзаком, когда в треке нет меток времени. Значение выбрано как стартовое.'),
+  P('smooth_thr', 'walk', 'Порог сглаживания высот', 'м', 5, 'Изменения высоты меньше порога считаются шумом GPS.'),
+  P('descent_th_low', 'walk', 'Спуск: мягкий до уклона', '%', 10),
+  P('descent_th_high', 'walk', 'Спуск: крутой от уклона', '%', 20),
+  P('descent_k_low', 'walk', 'Спуск мягкий: к стоимости ровного', '×', 0.85),
+  P('descent_k_mid', 'walk', 'Спуск средний: к стоимости ровного', '×', 1.0),
+  P('descent_k_high', 'walk', 'Спуск крутой: к стоимости ровного', '×', 1.15, 'Тормозящая работа мышц.'),
+
+  P('eta_asphalt', 'cover', 'Асфальт, η', '', 1.0),
+  P('eta_dirt', 'cover', 'Грунтовка, η', '', 1.1),
+  P('eta_trail', 'cover', 'Тропа / лёгкие кусты, η', '', 1.2),
+  P('eta_bush', 'cover', 'Густые кусты / курумник, η', '', 1.5),
+  P('eta_swamp', 'cover', 'Болото, η', '', 1.8),
+  P('eta_sand', 'cover', 'Песок, η', '', 2.1),
+  P('eta_snow_a', 'cover', 'Снег: базовая часть, η', '', 1.3, 'η снега = базовая + коэффициент × глубина в см.'),
+  P('eta_snow_b', 'cover', 'Снег: коэффициент на 1 см', '', 0.082),
+
+  P('camp_k', 'day', 'Бытовая активность в лагере', '×BMR', 1.3),
+  P('rest_k', 'day', 'Днёвка', '×BMR', 1.6),
+  P('cold_k', 'day', 'Холод', 'ккал/°C', 29),
+  P('cold_t0', 'day', 'Температура, ниже которой считаем холод', '°C', 15),
+  P('general_pct', 'day', 'Общая поправка «по опыту»', '%', 0, 'Прибавка к потребности. Например 10 — на десять процентов больше.'),
+  P('share_m', 'day', 'Доля общего груза по умолчанию: М', '', 1.0),
+  P('share_f', 'day', 'Доля общего груза по умолчанию: Ж', '', 0.7),
+  P('appetite_def', 'day', 'Коэффициент аппетита по умолчанию', '', 1.0),
+
+  P('alt_start', 'alt', 'Высота, с которой растёт расход', 'м', 2500),
+  P('alt_pct', 'alt', 'Прибавка расхода на каждые 1000 м выше порога', '%', 5),
+  P('app_alt1', 'alt', 'Аппетит выше 3000 м', '×', 0.9, 'Множитель объёма еды в первые дни на новой высоте.'),
+  P('app_alt2', 'alt', 'Аппетит выше 4000 м', '×', 0.8),
+  P('app_alt3', 'alt', 'Аппетит выше 5000 м', '×', 0.7),
+  P('app_days', 'alt', 'Сколько первых дней действует снижение аппетита', 'дн', 3),
+  P('macro_alt', 'alt', 'Высота сдвига БЖУ к углеводам', 'м', 4000),
+  P('macro_f_low', 'alt', 'БЖУ ниже: жиры (белки = 1)', '', 1),
+  P('macro_c_low', 'alt', 'БЖУ ниже: углеводы', '', 4),
+  P('macro_f_high', 'alt', 'БЖУ выше: жиры', '', 0.7),
+  P('macro_c_high', 'alt', 'БЖУ выше: углеводы', '', 5),
+
+  P('cov_hungry', 'food', 'Покрытие: голодная', '%', 55),
+  P('cov_std', 'food', 'Покрытие: стандарт', '%', 67),
+  P('cov_full', 'food', 'Покрытие: сытая', '%', 80),
+  P('cov_custom', 'food', 'Покрытие: своя', '%', 67),
+  P('cov_warn', 'food', 'Порог предупреждения о покрытии', '%', 67),
+  P('kcal100', 'food', 'Калорийность меню (до расчёта по продуктам)', 'ккал/100 г', 400, 'Для оценки граммов, пока меню не собрано (380–420).'),
+  P('ref_hungry', 'food', 'Ориентир: голодно', 'г/чел·день', 500),
+  P('ref_std', 'food', 'Ориентир: стандарт', 'г/чел·день', 600),
+  P('ref_full', 'food', 'Ориентир: сытно', 'г/чел·день', 850),
+  P('reserve_days', 'food', 'Аварийный запас', 'дн', 1),
+
+  P('split_b', 'menu', 'Доля ккал: завтрак', '%', 30),
+  P('split_l', 'menu', 'Доля ккал: обед', '%', 25),
+  P('split_d', 'menu', 'Доля ккал: ужин', '%', 35),
+  P('split_s', 'menu', 'Доля ккал: перекусы', '%', 10),
+  P('rot_days', 'menu', 'Цикл ротации блюд', 'дн', 3, 'Одна основа не повторяется чаще, чем раз в цикл (3–4 дня).'),
+  P('base_max', 'menu', 'Сколько раз за поход можно повторить основу', 'раз', 3, 'Значение выбрано как стартовое.'),
+
+  P('fuel_nosnow', 'fuel', 'Газ без снега', 'г/чел·день', 45),
+  P('fuel_snow', 'fuel', 'Газ с топкой снега', 'г/чел·день', 65),
+  P('fuel_cold', 'fuel', 'Газ в мороз или выше порога высоты', 'г/чел·день', 90),
+  P('fuel_cold_alt', 'fuel', 'Высота порога для «мороз»', 'м', 4000),
+  P('long_min', 'fuel', 'Круп, варящихся дольше', 'мин', 20),
+  P('long_g', 'fuel', 'Добавка газа за долгую варку', 'г/чел·день', 5, 'Значение выбрано как стартовое.'),
+  P('canister_g', 'fuel', 'Газа в баллоне', 'г', 230),
+  P('tea_g', 'fuel', 'Чай на человека в день', 'г', 4),
+  P('sugar_g', 'fuel', 'Сахар на человека в день (если общий)', 'г', 25),
+  P('salt_fix', 'fuel', 'Соль: на группу на поход', 'г', 20),
+  P('salt_pp', 'fuel', 'Соль: на человека в день', 'г', 2),
+  P('water_ml', 'fuel', 'Вода на кг веса', 'мл/кг', 30),
+  P('hot_t', 'fuel', 'Жара: максимальная температура выше', '°C', 25),
+  P('hot_l', 'fuel', 'Добавка воды в жару', 'л', 2, 'От 1 до 3 литров.'),
+];
+
+const COVERS = [
+  ['asphalt', 'Асфальт'], ['dirt', 'Грунтовка'], ['trail', 'Тропа'], ['bush', 'Кусты / курумник'],
+  ['swamp', 'Болото'], ['sand', 'Песок'], ['snow', 'Снег'],
+];
+const DAY_TYPES = ['Подходной', 'Ходовой', 'Штурмовой', 'Днёвка', 'Выход', 'Полудень'];
+const CATEGORIES = ['н/к', '1 к.с.', '2 к.с.', '3 к.с.', '4 к.с.', '5 к.с.', '6 к.с.'];
+
+return {APP_VERSION, TERMS_VERSION, DB_NAME, DB_VERSION, GROUPS, PARAMS, COVERS, DAY_TYPES, CATEGORIES};
+})();
+__m['store.js'] = (() => {
+// Обёртка над IndexedDB: хранилища trips, products, settings (ключ-значение).
+const {DB_NAME, DB_VERSION} = __m['defaults.js'];
+
+const STORES = ['trips', 'products', 'settings'];
+let dbp;
+
+function open() {
+  if (!dbp) {
+    dbp = new Promise((res, rej) => {
+      const r = indexedDB.open(DB_NAME, DB_VERSION);
+      r.onupgradeneeded = () => {
+        for (const s of STORES) if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s);
+      };
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  }
+  return dbp;
+}
+
+async function tx(store, mode, fn) {
+  const db = await open();
+  return new Promise((res, rej) => {
+    const t = db.transaction(store, mode);
+    const req = fn(t.objectStore(store));
+    t.oncomplete = () => res(req && req.result);
+    t.onerror = () => rej(t.error);
+  });
+}
+
+const get = (store, key) => tx(store, 'readonly', s => s.get(key));
+const put = (store, key, val) => tx(store, 'readwrite', s => s.put(val, key));
+const del = (store, key) => tx(store, 'readwrite', s => s.delete(key));
+const getAll = (store) => tx(store, 'readonly', s => s.getAll());
+
+function entries(store) {
+  return open().then(db => new Promise((res, rej) => {
+    const out = [], r = db.transaction(store, 'readonly').objectStore(store).openCursor();
+    r.onsuccess = () => { const c = r.result; if (c) { out.push([c.key, c.value]); c.continue(); } else res(out); };
+    r.onerror = () => rej(r.error);
+  }));
+}
+const clear = store => tx(store, 'readwrite', s => s.clear());
+
+return {get, put, del, getAll, entries, clear};
+})();
+__m['params.js'] = (() => {
+// Текущие значения параметров = значения по умолчанию + твои правки из Настроек.
+const {PARAMS} = __m['defaults.js'];
+const store = __m['store.js'];
+
+let over = {};
+const opts = { round: true, currency: '₸', dark: false };
+const loadParams = async () => { over = (await store.get('settings', 'params')) || {}; Object.assign(opts, await store.get('settings', 'opts')); };
+const saveOpts = () => store.put('settings', 'opts', opts);
+const getParam = id => (id in over ? over[id] : PARAMS.find(p => p.id === id).def);
+const isChanged = id => id in over;
+async function setParam(id, v) {
+  const def = PARAMS.find(p => p.id === id).def;
+  if (v === null || v === def) delete over[id]; else over[id] = v;
+  await store.put('settings', 'params', over);
+}
+async function resetParams(ids) {
+  for (const id of ids) delete over[id];
+  await store.put('settings', 'params', over);
+}
+const changedCount = () => Object.keys(over).length;
+const allParams = () => Object.fromEntries(PARAMS.map(p => [p.id, getParam(p.id)]));
+
+return {opts, loadParams, saveOpts, getParam, isChanged, setParam, resetParams, changedCount, allParams};
+})();
+__m['method.js'] = (() => {
+// Справка по методологии. {id} подставляется текущим значением параметра и ведёт в его настройку.
+const METHOD = [
+  ['1. Основной обмен (BMR)', `Формула Миффлина — Сан Жеора на каждого участника:
+М: 10·вес + 6,25·рост − 5·возраст + 5
+Ж: 10·вес + 6,25·рост − 5·возраст − 161
+Это расход покоя в ккал за сутки.`],
+  ['2. Ходьба (Пандольф)', `Расход считается по участкам трека длиной {seg_step} м:
+M (Вт) = 1,5·W + 2·(W+L)·(L/W)² + η·(W+L)·(1,5·v² + 0,35·v·G)
+W — вес тела, L — вес рюкзака (меняется по дням: еда съедается), v — скорость м/с, G — уклон в % (от −{slope_clip} до +{slope_clip}), η — коэффициент покрытия.
+Результат умножается на поправку {pandolf_corr}, потому что формула занижает реальный расход. Ватт-часы в ккал: ×{kcal_per_wh}.
+Скорость берётся из меток времени трека, а если их нет — по функции Тоблера с базой {tobler_base} км/ч.
+Высоты трека сглаживаются, порог {smooth_thr} м.`],
+  ['3. Покрытие и спуск', `η: асфальт {eta_asphalt}, грунтовка {eta_dirt}, тропа {eta_trail}, кусты и курумник {eta_bush}, болото {eta_swamp}, песок {eta_sand}. Снег: {eta_snow_a} + {eta_snow_b}·глубина в см.
+Спуск: берётся стоимость ровного участка с коэффициентом {descent_k_low} при уклоне до {descent_th_low}%, {descent_k_mid} при {descent_th_low}–{descent_th_high}% и {descent_k_high} круче {descent_th_high}%.`],
+  ['4. Остальная часть суток и тип дня', `Вне ходьбы: (24 − ходовые часы) · BMR/24 · {camp_k}.
+Днёвка: BMR · {rest_k}, без ходьбы.
+Подходной и выход: доля дня по фактическому треку. Штурмовой: ходьба по треку плюс ранний подъём и горячий перекус.`],
+  ['5. Холод и высота', `Холод: + {cold_k} ккал на каждый градус ниже {cold_t0} °C средней температуры дня.
+Высота: расход растёт на {alt_pct}% за каждые 1000 м выше {alt_start} м (по максимальной высоте дня).
+Аппетит в первые {app_days} дня на новой высоте: ×{app_alt1} выше 3000 м, ×{app_alt2} выше 4000 м, ×{app_alt3} выше 5000 м.
+Выше {macro_alt} м соотношение белки : жиры : углеводы сдвигается с 1 : {macro_f_low} : {macro_c_low} до 1 : {macro_f_high} : {macro_c_high}.
+Все эти оценки приблизительные, поэтому их можно менять.`],
+  ['6. Потребность и раскладка', `Потребность = (ходьба + остаток суток + холод) · высота · личный коэффициент аппетита · (1 + {general_pct}%).
+Цель по ккал = потребность × покрытие: голодная {cov_hungry}%, стандарт {cov_std}%, сытая {cov_full}%, своя {cov_custom}%. Ниже {cov_warn}% показывается предупреждение.
+Граммы = цель / калорийность меню (около {kcal100} ккал/100 г, потом считается по реальным продуктам). Ориентиры для сверки: {ref_hungry} г — голодно, {ref_std} г — стандарт, {ref_full} г — сытно.
+Аварийный запас: {reserve_days} дн.
+Вес рюкзака проверяется: личное снаряжение + доля общего + продукты до ближайшей заброски не больше лимита.`],
+  ['7. Меню и приёмы пищи', `Приёмы пищи делят ккал дня: завтрак {split_b}%, обед {split_l}%, ужин {split_d}%, перекусы на ходу {split_s}%. Недобор до цели добивается перекусами.
+Блюдо — шаблон из слотов (основа, мясо, овощи, вкус, жир, сыр). Одна основа не повторяется два приёма подряд и не чаще {base_max} раз за поход; цикл ротации {rot_days} дн.
+Порция на группу = сумма базовых порций × энергетическая доля каждого участника. Доля общего груза участника влияет только на распределение рюкзаков.`],
+  ['8. Топливо и вода', `Газ на человека в день: {fuel_nosnow} г без снега, {fuel_snow} г с топкой снега, {fuel_cold} г в мороз или выше {fuel_cold_alt} м. За крупы, варящиеся дольше {long_min} мин, добавляется {long_g} г.
+Вода: {water_ml} мл на кг веса, в жару (максимум выше {hot_t} °C) плюс {hot_l} л.`],
+];
+
+return {METHOD};
+})();
+__m['ui.js'] = (() => {
+// Общие кусочки интерфейса: экранирование и генератор форм по описанию полей.
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// Поле: {k, label, type: text|number|date|select|seg|check, opts:[[value,label]], help, show:(obj)=>bool, unit}
+function form(fields, obj) {
+  return fields.filter(f => !f.show || f.show(obj)).map(f => {
+    const v = obj[f.k] ?? '';
+    const q = f.help ? `<button class="q" data-help="${f.k}" aria-label="Пояснение">?</button>` : '';
+    let ctl;
+    if (f.type === 'select') ctl = `<select data-k="${f.k}">${f.opts.map(([a, b]) => `<option value="${esc(a)}"${a == v ? ' selected' : ''}>${esc(b)}</option>`).join('')}</select>`;
+    else if (f.type === 'seg') ctl = `<div class="seg">${f.opts.map(([a, b]) => `<button data-seg="${f.k}" data-v="${esc(a)}" class="${a == v ? 'on' : ''}">${esc(b)}</button>`).join('')}</div>`;
+    else if (f.type === 'check') ctl = `<input type="checkbox" data-k="${f.k}"${obj[f.k] ? ' checked' : ''}>`;
+    else ctl = `<input data-k="${f.k}" type="${f.type || 'text'}" ${f.type === 'number' ? 'inputmode="decimal" step="any"' : ''} value="${esc(v)}">${f.unit ? `<span class="muted unit">${f.unit}</span>` : ''}`;
+    return `<div class="fld"><label>${esc(f.label)}${q}</label><div class="ctl">${ctl}</div></div>${f.help ? `<p class="help" id="help-${f.k}" hidden>${esc(f.help)}</p>` : ''}`;
+  }).join('');
+}
+
+// Привязка событий. onChange вызывается после каждого изменения; rerender — если поле влияет на вид формы.
+function bindForm(root, fields, obj, onChange, rerender) {
+  const type = k => fields.find(f => f.k === k)?.type;
+  root.querySelectorAll('[data-k]').forEach(el => el.onchange = () => {
+    const k = el.dataset.k, t = type(k);
+    obj[k] = t === 'check' ? el.checked : t === 'number' ? (el.value === '' ? null : Number(el.value)) : el.value;
+    onChange(k);
+    if (t === 'select' || t === 'check') rerender();
+  });
+  root.querySelectorAll('[data-seg]').forEach(b => b.onclick = () => {
+    const k = b.dataset.seg;
+    obj[k] = b.dataset.v;
+    onChange(k);
+    rerender();
+  });
+  root.querySelectorAll('[data-help]').forEach(b => b.onclick = () => {
+    const p = root.querySelector('#help-' + b.dataset.help);
+    p.hidden = !p.hidden;
+  });
+}
+
+return {esc, form, bindForm};
+})();
+__m['settings.js'] = (() => {
+const {APP_VERSION, TERMS_VERSION, PARAMS, GROUPS} = __m['defaults.js'];
+const {getParam, setParam, isChanged, resetParams, changedCount} = __m['params.js'];
+const {METHOD} = __m['method.js'];
+const {esc} = __m['ui.js'];
+const store = __m['store.js'];
+
+const DISCLAIMER = 'Расчёт питания в этом приложении оценочный и не является медицинской рекомендацией. Ответственность за питание группы лежит на руководителе и завхозе.';
+const back = (to, label = 'Назад') => `<button class="back" data-go="${to}">‹ ${label}</button>`;
+
+const views = {
+  settings(_, ctx) {
+    const th = (v, n) => `<button data-theme="${v}" class="${ctx.state.theme === v ? 'on' : ''}">${n}</button>`;
+    return {
+      html: `${back('')}<h2>Настройки</h2>
+        <p class="muted">Тема оформления</p><div class="seg">${th('auto', 'Авто')}${th('light', 'Светлая')}${th('dark', 'Тёмная')}</div>
+        <ul class="list">
+          ${ctx.state.productsInSettings ? '<li><button data-go="products">Продукты<span>›</span></button></li>' : ''}
+          <li><button data-go="params">Параметры расчёта<span>${PARAMS.length}${changedCount() ? ` · изменено ${changedCount()}` : ''} ›</span></button></li>
+          <li><button data-go="method">Методология расчёта<span>справка ›</span></button></li>
+          <li><button data-go="adj">Мои поправки<span>›</span></button></li>
+          <li><button data-go="dishes">Шаблоны блюд<span>›</span></button></li>
+          <li><button data-go="shopset">Магазин: округление и валюта<span>›</span></button></li>
+          <li><button data-go="history">История походов<span>›</span></button></li>
+          <li><button data-go="feedback">Отзыв после похода<span>›</span></button></li>
+          <li><button data-go="backup">Резервная копия<span>›</span></button></li>
+          <li><button data-go="features">Возможности приложения<span>›</span></button></li>
+          <li><button data-go="legal">Правовая информация<span>›</span></button></li>
+        </ul>`,
+      bind(root) {
+        root.querySelectorAll('[data-theme]').forEach(b => b.onclick = async () => {
+          ctx.state.theme = b.dataset.theme; await store.put('settings', 'theme', ctx.state.theme); ctx.applyTheme(); ctx.rerender();
+        });
+      },
+    };
+  },
+
+  legal() {
+    return {
+      html: `${back('settings')}<h2>Правовая информация</h2><p>${DISCLAIMER}</p>
+        <p class="muted">Источники данных: Open Food Facts (лицензия ODbL), Open-Meteo (CC BY 4.0). Версия приложения ${APP_VERSION}, условия v${TERMS_VERSION}.</p>`,
+    };
+  },
+
+  params(group, ctx) {
+    group = group || 'walk';
+    const list = PARAMS.filter(p => p.group === group);
+    return {
+      html: `${back('settings')}<h2>Параметры расчёта</h2>
+        <div class="chips">${GROUPS.map(([g, n]) => `<button data-grp="${g}" class="${g === group ? 'on' : ''}">${n}</button>`).join('')}</div>
+        <p class="muted">Это оценочные значения. Изменённые помечены точкой.</p>
+        ${list.map(p => `<div class="fld"><label>${esc(p.label)}${isChanged(p.id) ? ' <span class="dot">●</span>' : ''}${p.hint ? `<button class="q" data-help="${p.id}">?</button>` : ''}</label>
+          <div class="ctl"><input type="number" inputmode="decimal" step="any" data-p="${p.id}" value="${getParam(p.id)}"><span class="muted unit">${esc(p.unit)}</span>
+          ${isChanged(p.id) ? `<button class="mini" data-reset="${p.id}">По умолчанию: ${p.def}</button>` : ''}</div></div>
+          ${p.hint ? `<p class="help" id="help-${p.id}" hidden>${esc(p.hint)}</p>` : ''}`).join('')}
+        <button class="btn ghost" id="resetg">Сбросить группу</button>`,
+      bind(root) {
+        root.querySelectorAll('[data-grp]').forEach(b => b.onclick = () => ctx.go('params', b.dataset.grp, true));
+        root.querySelectorAll('[data-help]').forEach(b => b.onclick = () => { const p = root.querySelector('#help-' + b.dataset.help); p.hidden = !p.hidden; });
+        root.querySelectorAll('[data-p]').forEach(i => i.onchange = async () => {
+          await setParam(i.dataset.p, i.value === '' ? null : Number(i.value)); ctx.rerender();
+        });
+        root.querySelectorAll('[data-reset]').forEach(b => b.onclick = async () => { await resetParams([b.dataset.reset]); ctx.rerender(); });
+        root.querySelector('#resetg').onclick = async () => { await resetParams(list.map(p => p.id)); ctx.rerender(); };
+      },
+    };
+  },
+
+  method(_, ctx) {
+    return {
+      html: `${back('settings')}<h2>Методология расчёта</h2>
+        <p class="muted">Справка. Цифры в тексте — текущие значения параметров, нажми на число, чтобы его изменить.</p>
+        ${METHOD.map(([t, body]) => `<h3>${esc(t)}</h3><p class="prose">${esc(body).replace(/\{(\w+)\}/g, (_, id) => `<a class="pv" data-pv="${id}">${getParam(id)}</a>`)}</p>`).join('')}`,
+      bind(root) {
+        root.querySelectorAll('[data-pv]').forEach(a => a.onclick = () => ctx.go('params', PARAMS.find(p => p.id === a.dataset.pv).group));
+      },
+    };
+  },
+};
+
+return {DISCLAIMER, views};
+})();
+__m['products.js'] = (() => {
+// Встроенная база продуктов (справочные значения на 100 г, магазины Казахстана/СНГ). «?» в названии — значение приблизительное, проверьте по упаковке.
+// Строка: название, категория, ккал, белки, жиры, углеводы, упаковка г, хранение жарко (дн), хранение в прохладе (дн), теги
+const CATS = [
+  ['grain', 'Крупы и макароны'], ['legume', 'Бобовые'], ['bread', 'Хлеб и сухари'], ['meat', 'Мясо и колбасы'], ['cheese', 'Сыры'],
+  ['dairy', 'Молочное'], ['fat', 'Жиры'], ['veg', 'Овощи свежие'], ['spice', 'Приправы и соусы'], ['soup', 'Супы в пакетах'],
+  ['sweet', 'Сладкое'], ['nuts', 'Орехи и сухофрукты'], ['drink', 'Напитки'], ['fresh', 'Свежее на первые дни'],
+];
+const SHOP_DEPT = { grain: 'Бакалея', legume: 'Бакалея', bread: 'Хлеб', meat: 'Мясо', cheese: 'Молочный отдел', dairy: 'Молочный отдел', fat: 'Бакалея', veg: 'Овощи', spice: 'Специи', soup: 'Бакалея', sweet: 'Сладкое', nuts: 'Сухофрукты и орехи', drink: 'Напитки', fresh: 'Овощи' };
+
+const R = [
+  // крупы
+  ['Гречка', 'grain', 313, 12.6, 3.3, 62.1, 800, 999, 999, ''], ['Рис круглозёрный', 'grain', 330, 7, 1, 74, 800, 999, 999, ''],
+  ['Рис длиннозёрный', 'grain', 340, 7, 0.6, 77, 800, 999, 999, ''], ['Пшено', 'grain', 348, 11.5, 3.3, 69.3, 800, 999, 999, ''],
+  ['Овсянка быстрого приготовления', 'grain', 366, 12, 6.2, 62, 500, 999, 999, 'gluten'], ['Овсяные хлопья «Геркулес»', 'grain', 352, 12.3, 6.2, 61.8, 500, 999, 999, 'gluten'],
+  ['Манка', 'grain', 328, 10.3, 1, 70.6, 700, 999, 999, 'gluten'], ['Кукурузная крупа', 'grain', 325, 8.3, 1.2, 75, 700, 999, 999, ''],
+  ['Перловка', 'grain', 320, 9.3, 1.1, 73.7, 800, 999, 999, 'gluten'], ['Булгур', 'grain', 342, 12.3, 1.3, 75.9, 800, 999, 999, 'gluten'],
+  ['Кускус', 'grain', 360, 12.8, 0.6, 72.4, 500, 999, 999, 'gluten'], ['Макароны', 'grain', 350, 11, 1.3, 72, 400, 999, 999, 'gluten'],
+  ['Вермишель', 'grain', 350, 11, 1.3, 72, 400, 999, 999, 'gluten'], ['Лапша быстрого приготовления (без приправы)', 'grain', 440, 9, 18, 60, 75, 999, 999, 'gluten'],
+  ['Картофельное пюре быстрое', 'grain', 340, 6, 1, 76, 250, 999, 999, ''], ['Мюсли', 'grain', 360, 9, 7, 65, 400, 300, 300, 'gluten'],
+  ['Каша быстрая в пакете', 'grain', 360, 11, 7, 63, 40, 999, 999, 'gluten'],
+  // бобовые
+  ['Чечевица красная', 'legume', 318, 24, 1.5, 54, 500, 999, 999, ''], ['Горох колотый', 'legume', 298, 20.5, 2, 49.5, 800, 999, 999, ''],
+  ['Фасоль сухая', 'legume', 310, 21, 2, 47, 800, 999, 999, ''], ['Нут', 'legume', 364, 19, 6, 61, 800, 999, 999, ''],
+  ['Маш', 'legume', 347, 23.5, 1.2, 46, 800, 999, 999, ''], ['Соевое мясо (гранулы)', 'legume', 336, 52, 1, 30, 200, 999, 999, ''],
+  // хлеб
+  ['Сухари ржаные', 'bread', 335, 11, 2, 68, 300, 365, 365, 'gluten'], ['Сухари пшеничные', 'bread', 390, 11.5, 7, 70, 300, 365, 365, 'gluten'],
+  ['Хлебцы хрустящие', 'bread', 310, 10, 2, 60, 200, 365, 365, 'gluten'], ['Лаваш тонкий', 'bread', 275, 9, 1.2, 56, 300, 5, 10, 'gluten'],
+  ['Лепёшка / баурсаки сухие?', 'bread', 400, 8, 18, 52, 300, 14, 30, 'gluten'], ['Крекер солёный', 'bread', 440, 10, 15, 66, 200, 180, 180, 'gluten'],
+  ['Хлеб чёрный', 'bread', 210, 6.5, 1.2, 40, 600, 4, 7, 'gluten'], ['Мука пшеничная (для лепёшек)', 'bread', 334, 10.3, 1.1, 68.9, 1000, 365, 365, 'gluten'],
+  // мясо
+  ['Тушёнка говяжья', 'meat', 232, 16, 18, 0, 338, 730, 730, 'meat'], ['Тушёнка свиная', 'meat', 349, 14, 32, 0, 338, 730, 730, 'meat pork'],
+  ['Казы', 'meat', 400, 20, 35, 0, 500, 14, 30, 'meat'], ['Шұжық (конская колбаса)', 'meat', 360, 18, 32, 0, 500, 14, 30, 'meat'],
+  ['Карта?', 'meat', 380, 20, 33, 0, 500, 14, 30, 'meat'], ['Колбаса сырокопчёная', 'meat', 470, 24, 41, 0, 300, 30, 60, 'meat pork'],
+  ['Колбаса сыровяленая', 'meat', 450, 28, 38, 1, 300, 45, 90, 'meat pork'], ['Бастурма / вяленое мясо', 'meat', 280, 40, 12, 2, 150, 60, 120, 'meat'],
+  ['Сало солёное', 'meat', 770, 2.4, 89, 0, 300, 20, 60, 'meat pork'], ['Бекон копчёный?', 'meat', 500, 23, 45, 0, 200, 10, 30, 'meat pork'],
+  ['Грудинка копчёная', 'meat', 520, 17, 50, 0, 300, 14, 30, 'meat pork'], ['Паштет в банке', 'meat', 300, 11, 28, 2, 250, 365, 365, 'meat'],
+  ['Сосиски', 'meat', 270, 11, 24, 2, 400, 3, 10, 'meat pork'], ['Рыба консервы в масле', 'meat', 280, 17, 24, 0, 240, 730, 730, ''],
+  ['Сардины / шпроты консервы', 'meat', 350, 17, 32, 0, 160, 730, 730, ''], ['Сухой бульон / кубик', 'meat', 230, 12, 14, 12, 80, 365, 365, 'spicy'],
+  // сыры
+  ['Сыр твёрдый', 'cheese', 350, 25, 27, 0, 200, 14, 40, 'lactose'], ['Сыр копчёный колбасный', 'cheese', 280, 21, 20, 1, 200, 14, 40, 'lactose'],
+  ['Курт', 'cheese', 300, 40, 12, 5, 200, 180, 365, 'lactose'], ['Иримшик', 'cheese', 330, 25, 25, 3, 200, 120, 365, 'lactose'],
+  ['Сыр плавленый', 'cheese', 270, 15, 21, 6, 200, 20, 60, 'lactose'], ['Брынза?', 'cheese', 260, 18, 20, 0, 200, 5, 20, 'lactose'],
+  // молочное
+  ['Молоко сухое', 'dairy', 480, 25, 25, 39, 400, 365, 365, 'lactose'], ['Сгущёнка', 'dairy', 320, 7.2, 8.5, 56, 380, 365, 365, 'lactose'],
+  ['Сливки сухие', 'dairy', 580, 17, 42, 30, 200, 365, 365, 'lactose'], ['Сметана сухая?', 'dairy', 540, 15, 45, 20, 200, 365, 365, 'lactose'],
+  ['Какао-порошок', 'dairy', 290, 24, 15, 10, 100, 365, 365, ''], ['Творожная масса сухая?', 'dairy', 400, 30, 20, 25, 200, 180, 365, 'lactose'],
+  // жиры
+  ['Масло топлёное', 'fat', 890, 0.3, 99, 0.6, 180, 180, 365, 'lactose'], ['Масло сливочное', 'fat', 748, 0.5, 82.5, 0.8, 180, 5, 20, 'lactose'],
+  ['Масло подсолнечное', 'fat', 899, 0, 99.9, 0, 500, 365, 365, ''], ['Масло оливковое', 'fat', 899, 0, 99.9, 0, 250, 365, 365, ''],
+  ['Майонез в пакете', 'fat', 620, 1, 67, 3, 200, 30, 60, ''], ['Арахисовая паста', 'fat', 600, 25, 50, 15, 340, 180, 365, 'nuts'],
+  // овощи
+  ['Лук репчатый', 'veg', 41, 1.4, 0, 8.2, 1000, 30, 90, ''], ['Чеснок', 'veg', 143, 6.5, 0.5, 29.9, 100, 30, 90, ''],
+  ['Морковь', 'veg', 35, 1.3, 0.1, 6.9, 1000, 14, 45, ''], ['Картофель', 'veg', 77, 2, 0.4, 16.3, 1000, 14, 60, ''],
+  ['Капуста белокочанная', 'veg', 28, 1.8, 0.2, 4.7, 1500, 10, 30, ''], ['Свёкла', 'veg', 43, 1.5, 0.1, 8.8, 1000, 14, 45, ''],
+  ['Перец болгарский', 'veg', 27, 1.3, 0, 5.3, 500, 5, 10, ''], ['Помидоры', 'veg', 20, 1.1, 0.2, 3.7, 500, 4, 8, ''],
+  ['Огурцы', 'veg', 15, 0.8, 0.1, 2.8, 500, 3, 7, ''], ['Зелень сухая', 'veg', 250, 25, 5, 30, 30, 365, 365, ''],
+  ['Овощи сушёные (смесь)', 'veg', 270, 10, 1, 55, 100, 365, 365, ''], ['Грибы сушёные', 'veg', 280, 30, 6, 35, 50, 365, 365, ''],
+  ['Картофель сушёный', 'veg', 330, 8, 0.5, 75, 200, 365, 365, ''],
+  // приправы
+  ['Соль', 'spice', 0, 0, 0, 0, 1000, 999, 999, ''], ['Сахар', 'spice', 399, 0, 0, 99.8, 1000, 999, 999, ''],
+  ['Томатная паста (туба)', 'spice', 80, 4, 0, 15, 140, 180, 365, ''], ['Томатный порошок?', 'spice', 300, 12, 1, 60, 100, 365, 365, ''],
+  ['Аджика / паста острая', 'spice', 100, 2, 4, 14, 100, 90, 180, 'spicy'], ['Перец чёрный молотый', 'spice', 255, 11, 3, 64, 30, 999, 999, ''],
+  ['Паприка', 'spice', 282, 14, 13, 54, 30, 999, 999, ''], ['Хмели-сунели / универсальная приправа', 'spice', 250, 10, 5, 50, 50, 999, 999, ''],
+  ['Лавровый лист', 'spice', 313, 7.6, 8.4, 48.7, 10, 999, 999, ''], ['Соевый соус', 'spice', 60, 10, 0, 6, 150, 180, 365, ''],
+  ['Лимонная кислота', 'spice', 247, 0, 0, 98, 50, 999, 999, ''], ['Уксус столовый (порошок/пакет)?', 'spice', 20, 0, 0, 0.5, 50, 365, 365, ''],
+  ['Горчица порошок?', 'spice', 470, 25, 33, 20, 50, 365, 365, 'spicy'],
+  // супы
+  ['Суп в пакете (гороховый)', 'soup', 330, 14, 5, 55, 70, 365, 365, 'gluten'], ['Суп в пакете (куриный с лапшой)', 'soup', 350, 10, 8, 58, 60, 365, 365, 'gluten'],
+  ['Борщ в пакете', 'soup', 300, 8, 6, 52, 70, 365, 365, ''], ['Харчо в пакете', 'soup', 320, 9, 7, 54, 70, 365, 365, 'spicy'],
+  ['Заправка для супа (сухая)', 'soup', 280, 9, 5, 52, 60, 365, 365, ''],
+  // сладкое
+  ['Халва подсолнечная', 'sweet', 520, 11.6, 29.7, 54, 350, 90, 180, ''], ['Халва арахисовая?', 'sweet', 510, 13, 29, 52, 350, 90, 180, 'nuts'],
+  ['Козинаки', 'sweet', 520, 10, 30, 52, 150, 180, 365, 'nuts'], ['Жент / ұн-кара?', 'sweet', 450, 9, 20, 58, 300, 120, 240, ''],
+  ['Шоколад молочный', 'sweet', 540, 7, 30, 56, 90, 30, 180, 'lactose'], ['Шоколад горький', 'sweet', 540, 6, 35, 48, 90, 60, 365, ''],
+  ['Печенье овсяное', 'sweet', 440, 6.5, 16, 70, 300, 60, 120, 'gluten'], ['Печенье «Юбилейное»', 'sweet', 450, 7, 13, 74, 300, 90, 180, 'gluten'],
+  ['Вафли', 'sweet', 520, 4, 28, 62, 200, 90, 180, 'gluten'], ['Батончик злаковый', 'sweet', 400, 6, 12, 68, 40, 180, 365, 'gluten'],
+  ['Конфеты карамель', 'sweet', 390, 0, 0, 97, 200, 365, 365, ''], ['Мёд', 'sweet', 329, 0.8, 0, 81, 250, 365, 365, ''],
+  ['Зефир / пастила', 'sweet', 320, 1, 0, 78, 250, 60, 120, ''], ['Леденцы', 'sweet', 380, 0, 0, 95, 150, 365, 365, ''],
+  ['Варенье / джем', 'sweet', 260, 0.3, 0, 65, 300, 365, 365, ''], ['Щербет / ирис', 'sweet', 400, 3, 10, 75, 200, 90, 180, 'lactose'],
+  // орехи
+  ['Курага', 'nuts', 241, 5.2, 0, 55, 200, 180, 365, ''], ['Изюм', 'nuts', 264, 2.9, 0.6, 66, 200, 180, 365, ''],
+  ['Финики', 'nuts', 280, 2.5, 0.4, 70, 200, 180, 365, ''], ['Чернослив', 'nuts', 240, 2.3, 0.7, 57, 200, 180, 365, ''],
+  ['Грецкий орех', 'nuts', 654, 15.2, 65.2, 7, 150, 120, 240, 'nuts'], ['Арахис', 'nuts', 552, 26, 45, 10, 200, 120, 240, 'nuts'],
+  ['Миндаль', 'nuts', 579, 21, 50, 22, 150, 120, 240, 'nuts'], ['Фундук / кешью', 'nuts', 620, 17, 56, 15, 150, 120, 240, 'nuts'],
+  ['Семечки подсолнечника', 'nuts', 580, 21, 50, 20, 200, 120, 240, ''], ['Смесь орехов и сухофруктов', 'nuts', 450, 9, 25, 45, 200, 120, 240, 'nuts'],
+  ['Инжир сушёный', 'nuts', 250, 3.3, 0.9, 58, 200, 180, 365, ''],
+  // напитки
+  ['Чай чёрный', 'drink', 0, 0, 0, 0, 100, 999, 999, ''], ['Чай травяной / зелёный', 'drink', 0, 0, 0, 0, 100, 999, 999, ''],
+  ['Кофе растворимый', 'drink', 100, 15, 0, 14, 100, 999, 999, ''], ['Кофе 3-в-1 (пакетики)', 'drink', 420, 3, 12, 75, 18, 365, 365, 'lactose'],
+  ['Какао-напиток (пакетики)', 'drink', 400, 5, 8, 78, 20, 365, 365, 'lactose'], ['Изотоник / порошок электролитов', 'drink', 380, 0, 0, 95, 50, 999, 999, ''],
+  ['Компот / кисель сухой', 'drink', 360, 0.5, 0, 88, 100, 365, 365, ''], ['Цикорий / ячменный напиток?', 'drink', 70, 1, 0, 16, 100, 999, 999, ''],
+  // свежее
+  ['Яйца', 'fresh', 157, 12.7, 11.5, 0.7, 10, 7, 20, ''], ['Яблоки', 'fresh', 47, 0.4, 0.4, 9.8, 1000, 7, 30, ''],
+  ['Апельсины / мандарины', 'fresh', 43, 0.9, 0.2, 8.1, 1000, 7, 20, ''], ['Бананы', 'fresh', 96, 1.5, 0.2, 21, 1000, 3, 5, ''],
+  ['Лимон', 'fresh', 34, 0.9, 0.1, 3, 200, 10, 30, ''], ['Колбаса варёная', 'fresh', 300, 12, 28, 1, 400, 2, 5, 'meat pork'],
+  ['Мясо охлаждённое (шашлык)', 'fresh', 200, 18, 14, 0, 1000, 1, 2, 'meat'], ['Творог', 'fresh', 160, 18, 9, 3, 200, 1, 3, 'lactose'],
+  ['Сосиски копчёные', 'fresh', 300, 12, 28, 1, 400, 3, 7, 'meat pork'], ['Лепёшки свежие', 'fresh', 260, 8, 1, 55, 400, 2, 5, 'gluten'],
+  ['Плавленые сырки', 'fresh', 270, 14, 22, 5, 90, 5, 15, 'lactose'], ['Огурцы солёные?', 'fresh', 16, 0.8, 0.1, 1.7, 500, 10, 30, ''],
+];
+
+const SEED = R.map((r, i) => {
+  const chk = r[0].includes('?');
+  return {
+    id: 'b' + i, name: r[0].replace(/\?/g, ''), cat: r[1], kcal: r[2], p: r[3], f: r[4], c: r[5], pack: r[6],
+    hot: r[7], cool: r[8], fresh: r[7] <= 14 || r[1] === 'fresh', tags: r[9], price: null, src: 'справочник', check: chk, on: true, custom: false,
+  };
+});
+
+return {CATS, SHOP_DEPT, SEED};
+})();
+__m['pstore.js'] = (() => {
+// Хранилище продуктов: при первом запуске заполняется встроенной базой, правки хранятся в IndexedDB.
+const {SEED} = __m['products.js'];
+const store = __m['store.js'];
+
+let list = [];
+const products = () => list;
+async function loadProducts() {
+  list = await store.getAll('products');
+  if (!list.length) { for (const p of SEED) await store.put('products', p.id, p); list = SEED.map(p => ({ ...p })); }
+  return list;
+}
+const saveProduct = p => store.put('products', p.id, p);
+async function addProduct(p) { list.push(p); await saveProduct(p); }
+async function deleteProduct(id) { list = list.filter(p => p.id !== id); await store.del('products', id); }
+const seedOf = id => SEED.find(p => p.id === id);
+const byId = id => list.find(p => p.id === id);
+const enabled = () => list.filter(p => p.on);
+
+return {products, loadProducts, saveProduct, addProduct, deleteProduct, seedOf, byId, enabled};
+})();
+__m['productsview.js'] = (() => {
+// Экран «Продукты»: список с переключателями, поиск, правка, свой продукт через Open Food Facts.
+const {CATS} = __m['products.js'];
+const {products, saveProduct, addProduct, deleteProduct, seedOf} = __m['pstore.js'];
+const {form, bindForm, esc} = __m['ui.js'];
+const store = __m['store.js'];
+
+const ui = { cat: 'all', q: '', found: null, msg: '' };
+const PF = [
+  { k: 'name', label: 'Название' }, { k: 'cat', label: 'Категория', type: 'select', opts: CATS },
+  { k: 'kcal', label: 'Ккал на 100 г', type: 'number' }, { k: 'p', label: 'Белки на 100 г', type: 'number' },
+  { k: 'f', label: 'Жиры на 100 г', type: 'number' }, { k: 'c', label: 'Углеводы на 100 г', type: 'number' },
+  { k: 'pack', label: 'Типовая упаковка', type: 'number', unit: 'г' },
+  { k: 'hot', label: 'Хранится в жару', type: 'number', unit: 'дн', help: 'Сколько дней продукт выдерживает без холодильника при жаре (около +25 °C). 999 — практически не портится.' },
+  { k: 'cool', label: 'Хранится в прохладе', type: 'number', unit: 'дн' },
+  { k: 'price', label: 'Цена упаковки', type: 'number' },
+  { k: 'tags', label: 'Теги (gluten lactose meat pork nuts spicy)' },
+];
+const back = (to, t) => `<button class="back" data-go="${to}">‹ ${t}</button>`;
+
+async function searchOff(q) {
+  const enc = encodeURIComponent(q), tries = [
+    [`https://search.openfoodfacts.org/search?q=${enc}&page_size=12&fields=product_name,nutriments,quantity,brands`, j => j.hits],
+    [`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${enc}&search_simple=1&action=process&json=1&page_size=12&fields=product_name,nutriments,quantity,brands`, j => j.products],
+  ];
+  let list = null, last = '';
+  for (const [url, pick] of tries) {
+    try { const r = await fetch(url); if (r.ok) { list = pick(await r.json()) || []; break; } last = 'ошибка ' + r.status; } catch (e) { last = 'нет связи'; }
+  }
+  if (!list) throw new Error('Open Food Facts: ' + last);
+  return list.filter(p => p.product_name && p.nutriments && p.nutriments['energy-kcal_100g'] != null).map(p => {
+    const n = p.nutriments, m = /([\d.,]+)\s*(kg|кг|g|г)/i.exec(p.quantity || ''), br = Array.isArray(p.brands) ? p.brands[0] : (p.brands || '').split(',')[0];
+    return { name: p.product_name + (br ? ` (${br})` : ''), kcal: Math.round(n['energy-kcal_100g']), p: +(n.proteins_100g || 0).toFixed(1), f: +(n.fat_100g || 0).toFixed(1), c: +(n.carbohydrates_100g || 0).toFixed(1),
+      pack: m ? Math.round(parseFloat(m[1].replace(',', '.')) * (/k|к/i.test(m[2]) ? 1000 : 1)) : null };
+  });
+}
+
+const mapOff = p => {
+  const n = p.nutriments, m = /([\d.,]+)\s*(kg|кг|g|г)/i.exec(p.quantity || '');
+  return { name: p.product_name || 'Продукт', kcal: Math.round(n['energy-kcal_100g'] || 0), p: +(n.proteins_100g || 0).toFixed(1), f: +(n.fat_100g || 0).toFixed(1), c: +(n.carbohydrates_100g || 0).toFixed(1), pack: m ? Math.round(parseFloat(m[1].replace(',', '.')) * (/k|к/i.test(m[2]) ? 1000 : 1)) : null };
+};
+async function byBarcode(code) {
+  const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,nutriments,quantity,brands`);
+  const j = await r.json(); if (j.status !== 1 || !j.product?.nutriments) throw new Error('Продукт с таким штрихкодом не найден');
+  return mapOff(j.product);
+}
+async function scan(video, onCode) {
+  const det = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] });
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  video.srcObject = stream; await video.play();
+  const stop = () => stream.getTracks().forEach(t => t.stop());
+  (async function loop() {
+    if (!stream.active) return;
+    try { const r = await det.detect(video); if (r[0]) { stop(); onCode(r[0].rawValue); return; } } catch { /* кадр не готов */ }
+    setTimeout(loop, 300);
+  })();
+  return stop;
+}
+
+const views = {
+  products(_, ctx) {
+    const q = ui.q.trim().toLowerCase();
+    const list = products().filter(p => (ui.cat === 'all' || p.cat === ui.cat) && (!q || p.name.toLowerCase().includes(q)));
+    const catOn = ui.cat !== 'all' && products().filter(p => p.cat === ui.cat).every(p => p.on);
+    return {
+      html: `<h2>Продукты</h2>
+        <input id="q" class="search" placeholder="Поиск по названию" value="${esc(ui.q)}">
+        <div class="chips"><button data-c="all" class="${ui.cat === 'all' ? 'on' : ''}">Все</button>${CATS.map(([k, n]) => `<button data-c="${k}" class="${ui.cat === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+        ${ui.cat !== 'all' ? `<button class="mini" id="alltog">${catOn ? 'Выключить всю категорию' : 'Включить всю категорию'}</button>` : ''}
+        <p class="muted small">Включено ${products().filter(p => p.on).length} из ${products().length}. «?» — значение приблизительное, сверьте с упаковкой.</p>
+        <ul class="list plist">${list.map(p => `<li><label class="sw"><input type="checkbox" data-on="${p.id}"${p.on ? ' checked' : ''}></label><button data-go="product" data-arg="${p.id}"><span>${esc(p.name)}${p.check ? ' <span class="dot">?</span>' : ''}${p.custom ? ' ★' : ''}</span><span class="muted">${p.kcal} ккал ›</span></button></li>`).join('') || '<li class="muted">Ничего не найдено</li>'}</ul>
+        <button class="btn" data-go="addprod">Добавить продукт</button>
+        <button class="btn ghost" id="done">Готово, перенести «Продукты» в Настройки</button>`,
+      bind(root) {
+        const q = root.querySelector('#q'); q.oninput = () => { ui.q = q.value; const pos = q.selectionStart; ctx.rerender(); const n = document.querySelector('#q'); n.focus(); n.setSelectionRange(pos, pos); };
+        root.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { ui.cat = b.dataset.c; ctx.rerender(); });
+        root.querySelectorAll('[data-on]').forEach(c => c.onchange = () => { const p = products().find(x => x.id === c.dataset.on); p.on = c.checked; saveProduct(p); ctx.rerender(); });
+        root.querySelector('#alltog')?.addEventListener('click', () => { products().filter(p => p.cat === ui.cat).forEach(p => { p.on = !catOn; saveProduct(p); }); ctx.rerender(); });
+        root.querySelector('#done').onclick = async () => { ctx.state.productsInSettings = true; await store.put('settings', 'productsDone', true); ctx.state.tab = 'trip'; ctx.go('settings'); };
+      },
+    };
+  },
+
+  product(id, ctx) {
+    const p = products().find(x => x.id === id), seed = seedOf(id);
+    return {
+      html: `${back('products', 'Продукты')}<h2>${esc(p.name)}</h2><p class="muted small">Источник: ${esc(p.src)}</p>${form(PF, p)}
+        ${seed ? '<button class="btn ghost" id="reset">Сбросить к исходным значениям</button>' : '<button class="btn danger" id="del">Удалить продукт</button>'}`,
+      bind(root) {
+        bindForm(root, PF, p, () => { p.fresh = (p.hot ?? 999) <= 14 || p.cat === 'fresh'; saveProduct(p); }, () => ctx.rerender());
+        root.querySelector('#reset')?.addEventListener('click', () => { Object.assign(p, seed, { on: p.on }); saveProduct(p); ctx.rerender(); });
+        root.querySelector('#del')?.addEventListener('click', async () => { await deleteProduct(id); ctx.go('products'); });
+      },
+    };
+  },
+
+  addprod(_, ctx) {
+    return {
+      html: `${back('products', 'Продукты')}<h2>Добавить продукт</h2>
+        <p class="muted">Введи название — поищем в Open Food Facts и заполним КБЖУ. Нужен интернет.</p>
+        <div class="two"><input id="name" class="search" placeholder="Например: гречка"><button class="btn" id="find" style="width:auto;margin:0">Найти</button></div>
+        <p class="warnmsg">${esc(ui.msg)}</p>
+        ${ui.found ? `<ul class="list">${ui.found.map((f, i) => `<li><button data-pick="${i}"><span>${esc(f.name)}</span><span class="muted">${f.kcal} ккал · Б${f.p} Ж${f.f} У${f.c}</span></button></li>`).join('') || '<li class="muted">Ничего не нашлось</li>'}</ul>` : ''}
+        <h3>Штрихкод</h3><div class="two"><input id="code" class="search" inputmode="numeric" placeholder="Номер под штрихкодом"><button class="btn" id="bc" style="width:auto;margin:0">Найти</button></div>
+        ${'BarcodeDetector' in window ? '<button class="btn ghost" id="cam">Сканировать камерой</button><video id="vid" playsinline muted style="width:100%;display:none"></video>' : '<p class="muted small">Сканирование камерой не поддерживается в этом браузере (нужен Chrome на Android). Можно ввести номер.</p>'}
+        <button class="btn ghost" id="manual">Ввести вручную</button>`,
+      bind(root) {
+        const mk = (o, src) => { const p = { id: 'u' + Date.now(), name: '', cat: 'sweet', kcal: 0, p: 0, f: 0, c: 0, pack: null, hot: 30, cool: 90, fresh: false, tags: '', price: null, check: false, on: true, custom: true, src, ...o }; addProduct(p); ui.found = null; ui.msg = ''; ctx.go('product', p.id); };
+        root.querySelector('#find').onclick = async () => {
+          const n = root.querySelector('#name').value.trim(); if (!n) return;
+          ui.msg = 'Ищу…'; root.querySelector('.warnmsg').textContent = ui.msg;
+          try { ui.found = await searchOff(n); ui.msg = ''; } catch (e) { ui.msg = e.message + '. Проверь интернет или введи вручную.'; ui.found = null; }
+          ctx.rerender();
+        };
+        root.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => mk(ui.found[+b.dataset.pick], 'Open Food Facts'));
+        const useCode = async code => { ui.msg = 'Ищу…'; root.querySelector('.warnmsg').textContent = ui.msg; try { mk(await byBarcode(code), 'Open Food Facts'); } catch (e) { ui.msg = e.message; ctx.rerender(); } };
+        root.querySelector('#bc').onclick = () => { const c = root.querySelector('#code').value.trim(); if (c) useCode(c); };
+        root.querySelector('#cam')?.addEventListener('click', async () => { const v = root.querySelector('#vid'); v.style.display = 'block'; try { await scan(v, useCode); } catch { ui.msg = 'Нет доступа к камере'; root.querySelector('.warnmsg').textContent = ui.msg; } });
+        root.querySelector('#manual').onclick = () => mk({ name: root.querySelector('#name').value.trim() || 'Новый продукт' }, 'вручную');
+      },
+    };
+  },
+};
+
+return {searchOff, byBarcode, views};
+})();
+__m['gpx.js'] = (() => {
+// Чистые функции для трека: разбор GPX, сглаживание, набор/сброс, время, разбивка на дни, запросы Open-Meteo.
+// Точка трека: [lat, lon, ele|null, время мс|null, номер сегмента]. Все коэффициенты приходят в P (из параметров).
+
+function parseGpx(text) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('Файл не похож на GPX');
+  const pts = []; let seg = 0;
+  doc.querySelectorAll('trk').forEach(trk => trk.querySelectorAll('trkseg').forEach(s => {
+    s.querySelectorAll('trkpt').forEach(p => {
+      const e = p.querySelector('ele'), t = p.querySelector('time');
+      pts.push([+p.getAttribute('lat'), +p.getAttribute('lon'), e ? +e.textContent : null, t ? Date.parse(t.textContent) || null : null, seg]);
+    });
+    seg++;
+  }));
+  const wpts = [...doc.querySelectorAll('wpt')].map(w => ({ name: w.querySelector('name')?.textContent || 'Точка', lat: +w.getAttribute('lat'), lon: +w.getAttribute('lon') }));
+  return { pts, wpts };
+}
+
+function dist(a, b) { // метры
+  const R = 6371000, r = Math.PI / 180, dLat = (b[0] - a[0]) * r, dLon = (b[1] - a[1]) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function downsample(pts, minM = 25) {
+  const out = [pts[0]];
+  for (const p of pts) if (p[4] !== out.at(-1)[4] || dist(out.at(-1), p) >= minM) out.push(p);
+  return out;
+}
+
+// Достраивает пропуски высот линейно между известными
+function fillEle(pts) {
+  const known = pts.map((p, i) => (p[2] == null ? -1 : i)).filter(i => i >= 0);
+  if (!known.length) return pts.map(() => 0);
+  return pts.map((p, i) => {
+    if (p[2] != null) return p[2];
+    const a = [...known].reverse().find(k => k < i), b = known.find(k => k > i);
+    if (a == null) return pts[b][2];
+    if (b == null) return pts[a][2];
+    return pts[a][2] + (pts[b][2] - pts[a][2]) * (i - a) / (b - a);
+  });
+}
+
+function smooth(e, win = 5) {
+  const h = win >> 1;
+  return e.map((_, i) => { let s = 0, n = 0; for (let j = Math.max(0, i - h); j <= Math.min(e.length - 1, i + h); j++) { s += e[j]; n++; } return s / n; });
+}
+
+// Набор и сброс с гистерезисом: изменения меньше порога thr не считаются
+function gainLoss(e, thr) {
+  let up = 0, down = 0, ref = e[0];
+  for (const v of e) {
+    if (v - ref >= thr) { up += v - ref; ref = v; } else if (ref - v >= thr) { down += ref - v; ref = v; }
+  }
+  return { up, down };
+}
+
+// Подготовка трека: накопленное расстояние (км) и сглаженные высоты
+function prep(track, P) {
+  const pts = track.pts, ele = smooth(fillEle(pts));
+  const d = [0];
+  for (let i = 1; i < pts.length; i++) d.push(d[i - 1] + (pts[i][4] === pts[i - 1][4] ? dist(pts[i - 1], pts[i]) / 1000 : 0));
+  return { pts, ele, d, total: d.at(-1), P };
+}
+
+// Скорость км/ч по Тоблеру: на ровном = базовой, на подъёме/спуске падает
+function speed(slope, P) {
+  const s = Math.max(-P.slope_clip, Math.min(P.slope_clip, slope * 100)) / 100;
+  return P.tobler_base * Math.exp(-3.5 * (Math.abs(s + 0.05) - 0.05));
+}
+
+function modelHours(T, i0, i1) {
+  let h = 0;
+  for (let i = i0 + 1; i <= i1; i++) {
+    const dk = T.d[i] - T.d[i - 1]; if (dk <= 0) continue;
+    h += dk / speed((T.ele[i] - T.ele[i - 1]) / (dk * 1000), T.P);
+  }
+  return h;
+}
+
+const idxAtKm = (T, km) => { const i = T.d.findIndex(v => v >= km); return i < 0 ? T.pts.length - 1 : i; };
+
+function dayStats(T, i0, i1) {
+  const e = T.ele.slice(i0, i1 + 1), { up, down } = gainLoss(e, T.P.smooth_thr);
+  const t0 = T.pts[i0][3], t1 = T.pts[i1][3];
+  return {
+    km: T.d[i1] - T.d[i0], up, down, maxAlt: Math.max(...e), minAlt: Math.min(...e),
+    hours: modelHours(T, i0, i1), hoursTime: t0 && t1 ? (t1 - t0) / 3600000 : null,
+  };
+}
+
+const totalStats = T => ({ ...dayStats(T, 0, T.pts.length - 1), hours: undefined });
+
+// Границы дней: массив [i0,i1] по километрам-ночёвкам cuts
+function ranges(T, cuts) {
+  const idx = [0, ...[...cuts].filter(k => k > 0 && k < T.total).sort((a, b) => a - b).map(k => idxAtKm(T, k)), T.pts.length - 1];
+  const r = []; for (let i = 0; i < idx.length - 1; i++) if (idx[i + 1] > idx[i]) r.push([idx[i], idx[i + 1]]);
+  return r;
+}
+
+const localDate = ms => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const dayDate = (T, i0) => (T.pts[i0][3] ? localDate(T.pts[i0][3]) : '');
+
+function splitDates(T) {
+  const c = []; let prev = T.pts[0][3] && localDate(T.pts[0][3]);
+  T.pts.forEach((p, i) => { if (!p[3]) return; const dt = localDate(p[3]); if (prev && dt !== prev) c.push(T.d[i]); prev = dt; });
+  return c;
+}
+function splitSegs(T) {
+  const c = []; T.pts.forEach((p, i) => { if (i && p[4] !== T.pts[i - 1][4]) c.push(T.d[i]); });
+  return c;
+}
+function splitWpts(T, wpts) {
+  return wpts.map(w => { let best = 0, bd = 1e12; T.pts.forEach((p, i) => { const x = dist(p, [w.lat, w.lon]); if (x < bd) { bd = x; best = i; } }); return bd < 1500 ? T.d[best] : null; })
+    .filter(k => k != null && k > 0.5 && k < T.total - 0.5);
+}
+function splitTarget(T, hours) {
+  const c = []; let acc = 0;
+  for (let i = 1; i < T.pts.length; i++) {
+    const dk = T.d[i] - T.d[i - 1]; if (dk <= 0) continue;
+    acc += dk / speed((T.ele[i] - T.ele[i - 1]) / (dk * 1000), T.P);
+    if (acc >= hours) { c.push(T.d[i]); acc = 0; }
+  }
+  if (c.length && T.total - c.at(-1) < 0.5) c.pop();
+  return c;
+}
+
+// ---- Интернет: Open-Meteo ----
+async function fetchElevations(pts, onProgress) {
+  const out = [];
+  for (let i = 0; i < pts.length; i += 100) {
+    const part = pts.slice(i, i + 100);
+    const r = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${part.map(p => p[0].toFixed(5)).join(',')}&longitude=${part.map(p => p[1].toFixed(5)).join(',')}`);
+    if (!r.ok) throw new Error('Open-Meteo: ошибка ' + r.status);
+    out.push(...(await r.json()).elevation);
+    onProgress?.(Math.min(i + 100, pts.length), pts.length);
+  }
+  return out;
+}
+
+const avg = a => a.reduce((s, x) => s + x, 0) / a.length;
+// Прогноз, если дата близко, иначе средние за 3 прошлых года на ту же дату
+async function fetchWeather(lat, lon, ele, date) {
+  const q = (base, d1, d2) => fetch(`${base}?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&elevation=${Math.round(ele)}&start_date=${d1}&end_date=${d2}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean&timezone=auto`).then(r => r.ok ? r.json() : Promise.reject(new Error('Open-Meteo: ошибка ' + r.status)));
+  const days = (new Date(date) - Date.now()) / 86400000;
+  if (days > -90 && days < 15) {
+    const d = (await q('https://api.open-meteo.com/v1/forecast', date, date)).daily;
+    if (d.temperature_2m_mean[0] != null) return { tmin: d.temperature_2m_min[0], tavg: d.temperature_2m_mean[0], tmax: d.temperature_2m_max[0], src: 'прогноз' };
+  }
+  const y = +date.slice(0, 4), cur = new Date().getFullYear(), rows = [];
+  for (let k = 1; k <= 3; k++) {
+    let yy = y - k; while (yy >= cur) yy--;
+    try { const d = (await q('https://archive-api.open-meteo.com/v1/archive', `${yy}${date.slice(4)}`, `${yy}${date.slice(4)}`)).daily; if (d.temperature_2m_mean[0] != null) rows.push(d); } catch { /* пропускаем год */ }
+  }
+  if (!rows.length) throw new Error('Нет данных погоды');
+  return { tmin: avg(rows.map(d => d.temperature_2m_min[0])), tavg: avg(rows.map(d => d.temperature_2m_mean[0])), tmax: avg(rows.map(d => d.temperature_2m_max[0])), src: 'климат' };
+}
+
+return {parseGpx, dist, downsample, fillEle, smooth, gainLoss, prep, speed, modelHours, idxAtKm, dayStats, totalStats, ranges, dayDate, splitDates, splitSegs, splitWpts, splitTarget, fetchElevations, fetchWeather};
+})();
+__m['gpxview.js'] = (() => {
+// Вкладка «GPX-трек»: загрузка, высоты, профиль с маркерами ночёвок, разбивка на дни, погода.
+const {PARAMS} = __m['defaults.js'];
+const {getParam} = __m['params.js'];
+const G = __m['gpx.js'];
+const {esc} = __m['ui.js'];
+
+const P = () => Object.fromEntries(PARAMS.map(p => [p.id, getParam(p.id)]));
+const r1 = x => Math.round(x * 10) / 10;
+const METHODS = [['dates', 'Даты'], ['segs', 'Сегменты'], ['wpts', 'Точки'], ['manual', 'Вручную'], ['target', 'По времени']];
+const msg = { text: '' };
+
+function applyCuts(trip, T) {
+  const tr = trip.track, rs = G.ranges(T, tr.cuts), old = trip.days.filter(d => d.fromTrack), rests = trip.days.filter(d => !d.fromTrack && d.after != null);
+  const days = [];
+  rs.forEach(([a, b], j) => {
+    const s = G.dayStats(T, a, b), o = old[j] || {};
+    const date = G.dayDate(T, a) || (trip.start ? new Date(Date.parse(trip.start) + j * 86400000).toISOString().slice(0, 10) : '');
+    days.push({
+      type: 'Ходовой', cover: 'trail', snow: null, tday: null, tnight: null, ...o, fromTrack: true, date: date || o.date || '',
+      km: r1(s.km), up: Math.round(s.up), down: Math.round(s.down), maxAlt: Math.round(s.maxAlt), hours: r1(s.hoursTime && s.hoursTime < 14 ? s.hoursTime : s.hours),
+      mid: [T.pts[(a + b) >> 1][0], T.pts[(a + b) >> 1][1]],
+    });
+    rests.filter(d => d.after === j).forEach(d => days.push(d));
+  });
+  trip.days = days;
+}
+
+function autoCuts(trip, T) {
+  const tr = trip.track, m = tr.method;
+  if (m === 'dates') tr.cuts = G.splitDates(T);
+  else if (m === 'segs') tr.cuts = G.splitSegs(T);
+  else if (m === 'wpts') tr.cuts = G.splitWpts(T, tr.wpts);
+  else if (m === 'target') tr.cuts = G.splitTarget(T, tr.target || 8);
+}
+
+function gpxSection(trip, save, ctx) {
+  const tr = trip.track;
+  if (!tr) {
+    return {
+      html: `<div class="drop-zone"><input type="file" id="file" accept=".gpx,application/gpx+xml" multiple><p class="muted">Выбери один или несколько GPX-файлов. Они склеятся по порядку.</p></div><p class="warnmsg">${esc(msg.text)}</p>`,
+      bind(root) {
+        root.querySelector('#file').onchange = async e => {
+          try {
+            let pts = [], wpts = [], seg = 0;
+            for (const f of e.target.files) {
+              const r = G.parseGpx(await f.text());
+              const maxSeg = Math.max(-1, ...r.pts.map(p => p[4]));
+              r.pts.forEach(p => { p[4] += seg; }); seg += maxSeg + 1;
+              pts.push(...r.pts); wpts.push(...r.wpts);
+            }
+            if (pts.length < 2) throw new Error('В файле нет точек трека');
+            pts = G.downsample(pts);
+            trip.track = { pts, wpts, cuts: [], method: 'dates', target: 8, files: [...e.target.files].map(f => f.name) };
+            const T = G.prep(trip.track, P()); autoCuts(trip, T);
+            if (!trip.track.cuts.length && trip.track.method === 'dates') { trip.track.method = 'segs'; autoCuts(trip, T); }
+            msg.text = '';
+            if (!pts.some(p => p[2] == null)) applyCuts(trip, T);
+            save(); ctx.rerender();
+          } catch (err) { msg.text = err.message; ctx.rerender(); }
+        };
+      },
+    };
+  }
+
+  const needEle = tr.pts.some(p => p[2] == null);
+  const T = G.prep(tr, P()), tot = G.totalStats(T), rs = G.ranges(T, tr.cuts);
+  const W = 600, H = 170, ymin = Math.min(...T.ele), ymax = Math.max(...T.ele), yr = Math.max(1, ymax - ymin);
+  const X = km => (km / T.total) * W, Y = e => H - 10 - ((e - ymin) / yr) * (H - 30);
+  const step = Math.max(1, Math.floor(T.pts.length / 400));
+  const line = T.pts.map((_, i) => i).filter(i => i % step === 0).map(i => `${X(T.d[i]).toFixed(1)},${Y(T.ele[i]).toFixed(1)}`).join(' ');
+  const markers = tr.cuts.map((k, i) => `<g class="mk" data-i="${i}"><line x1="${X(k)}" x2="${X(k)}" y1="0" y2="${H}"/><circle cx="${X(k)}" cy="12" r="11"/></g>`).join('');
+  const rows = trip.days.map((d, i) => `<li><button data-go="day" data-arg="${i}"><span>${i + 1} · ${esc(d.date || d.type)}</span><span class="muted">${d.fromTrack ? `${d.km} км · +${d.up}/−${d.down} · ${d.hours} ч` : esc(d.type)}${d.tday != null ? ` · ${Math.round(d.tday)}°/${d.tnight != null ? Math.round(d.tnight) : '—'}°` : ''} ›</span></button></li>`).join('');
+
+  return {
+    html: `<p><b>${r1(T.total)} км</b> · +${Math.round(tot.up)} / −${Math.round(tot.down)} м · ${Math.round(tot.minAlt)}–${Math.round(tot.maxAlt)} м<br><span class="muted">${esc((tr.files || []).join(', '))} · ${T.pts.length} точек, ${tr.wpts.length} путевых</span></p>
+      ${needEle ? '<p class="warnmsg">В треке нет высот. Набор считается по ним, поэтому их нужно загрузить из Open-Meteo (нужен интернет).</p><button class="btn" id="elev">Загрузить высоты</button>' : ''}
+      <p class="warnmsg" id="status">${esc(msg.text)}</p>
+      <svg id="prof" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Профиль высот"><polygon class="area" points="0,${H} ${line} ${W},${H}"/><polyline class="ln" points="${line}"/>${markers}</svg>
+      <p class="muted small">Маркеры ночёвок можно тянуть пальцем.</p>
+      <div class="chips">${METHODS.map(([k, n]) => `<button data-m="${k}" class="${tr.method === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+      ${tr.method === 'target' ? `<div class="fld"><label>Ходовых часов в день</label><div class="ctl"><input type="number" step="any" id="target" value="${tr.target}"></div></div>` : ''}
+      ${tr.method === 'manual' ? `<div class="fld"><label>Километры ночёвок через запятую</label><div class="ctl"><input id="kms" value="${tr.cuts.map(r1).join(', ')}"></div></div>` : ''}
+      <h3>Дни: ${rs.length}</h3><ul class="list">${rows}</ul>
+      <div class="two"><button class="btn ghost" id="rest">Вставить днёвку</button></div>
+      <button class="btn danger" id="clear">Убрать трек</button>`,
+    bind(root) {
+      const st = t => { msg.text = t; const s = root.querySelector('#status'); if (s) s.textContent = t; };
+      const recompute = (auto = true) => { if (auto) autoCuts(trip, T); applyCuts(trip, T); save(); ctx.rerender(); };
+      root.querySelector('#elev')?.addEventListener('click', async () => {
+        if (!confirm('Запросить высоты у Open-Meteo? Координаты трека уйдут на сервер open-meteo.com.')) return;
+        try {
+          const el = await G.fetchElevations(tr.pts, (a, b) => st(`Загружаю высоты: ${a} из ${b}`));
+          tr.pts.forEach((p, i) => { p[2] = el[i]; }); st(''); recompute(false);
+        } catch (e) { st(e.message + '. Проверь интернет и повтори.'); }
+      });
+      if (!needEle && !trip.days.some(d => d.fromTrack)) applyCuts(trip, T), save();
+      root.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { tr.method = b.dataset.m; if (tr.method !== 'manual') autoCuts(trip, T); applyCuts(trip, T); save(); ctx.rerender(); });
+      root.querySelector('#target')?.addEventListener('change', e => { tr.target = +e.target.value || 8; recompute(); });
+      root.querySelector('#kms')?.addEventListener('change', e => { tr.cuts = e.target.value.split(/[,;\s]+/).map(Number).filter(k => k > 0 && k < T.total); recompute(false); });
+      // перетаскивание маркеров
+      const svg = root.querySelector('#prof');
+      svg.querySelectorAll('.mk').forEach(g => g.addEventListener('pointerdown', e => {
+        e.preventDefault(); const i = +g.dataset.i; g.setPointerCapture(e.pointerId);
+        const mv = ev => { const r = svg.getBoundingClientRect(); tr.cuts[i] = Math.max(0.1, Math.min(T.total - 0.1, ((ev.clientX - r.left) / r.width) * T.total)); g.querySelectorAll('line').forEach(l => { l.setAttribute('x1', X(tr.cuts[i])); l.setAttribute('x2', X(tr.cuts[i])); }); g.querySelector('circle').setAttribute('cx', X(tr.cuts[i])); };
+        const up = () => { g.removeEventListener('pointermove', mv); g.removeEventListener('pointerup', up); tr.method = 'manual'; tr.cuts.sort((a, b) => a - b); recompute(false); };
+        g.addEventListener('pointermove', mv); g.addEventListener('pointerup', up);
+      }));
+      root.querySelector('#rest').onclick = () => {
+        const n = +prompt(`После какого дня вставить днёвку? (1–${rs.length})`, '1');
+        if (!n || n < 1 || n > rs.length) return;
+        trip.days.splice(trip.days.findIndex((d, i) => d.fromTrack && trip.days.filter((x, j) => j <= i && x.fromTrack).length === n) + 1, 0, { type: 'Днёвка', date: '', maxAlt: null, cover: 'trail', after: n - 1, tday: null, tnight: null });
+        save(); ctx.rerender();
+      };
+      root.querySelector('#clear').onclick = () => { if (confirm('Убрать трек и построенные по нему дни?')) { delete trip.track; trip.days = trip.days.filter(d => !d.fromTrack); save(); ctx.rerender(); } };
+    },
+  };
+}
+
+return {gpxSection};
+})();
+__m['trip.js'] = (() => {
+// Экран «Поход»: общий блок, группа, вкладка «Вручную». Данные хранятся в одном объекте trip.
+const {COVERS, DAY_TYPES, CATEGORIES} = __m['defaults.js'];
+const {getParam} = __m['params.js'];
+const {form, bindForm, esc} = __m['ui.js'];
+const {gpxSection} = __m['gpxview.js'];
+const store = __m['store.js'];
+
+const newTrip = () => ({
+  name: '', start: '', end: '', kind: 'mountain', category: CATEGORIES[0],
+  days: [], group: [], drops: [],
+  gear: { common: null, maxM: null, maxF: null },
+  food: { hot: '2', lunchHot: false },
+  prefs: { mode: 'std', custom: null, breakfast: 'milk', sugar: 'common', snacks: 'common', treat: false, budget: null, likes: '', dislikes: '' },
+});
+
+let trip;
+const loadTrip = async () => { trip = (await store.get('trips', 'current')) || newTrip(); return trip; };
+const save = () => store.put('trips', 'current', trip);
+const getTrip = () => trip;
+const saveTrip = save;
+const setTrip = t => { trip = t; save(); };
+const back = (to, label) => `<button class="back" data-go="${to}">‹ ${label}</button>`;
+const SEX = [['M', 'М'], ['F', 'Ж']];
+const KG = 'кг';
+
+const F = {
+  trip: [
+    { k: 'name', label: 'Название' }, { k: 'start', label: 'Начало', type: 'date' }, { k: 'end', label: 'Конец', type: 'date' },
+    { k: 'kind', label: 'Вид', type: 'seg', opts: [['hike', 'Пеший'], ['mountain', 'Горный'], ['ski', 'Лыжный'], ['water', 'Водный']] },
+    { k: 'category', label: 'Категория', type: 'select', opts: CATEGORIES.map(c => [c, c]) },
+  ],
+  day: [
+    { k: 'type', label: 'Тип дня', type: 'select', opts: DAY_TYPES.map(c => [c, c]) },
+    { k: 'date', label: 'Дата', type: 'date' },
+    { k: 'km', label: 'Расстояние', type: 'number', unit: 'км', show: d => d.type !== 'Днёвка' },
+    { k: 'up', label: 'Набор', type: 'number', unit: 'м', show: d => d.type !== 'Днёвка' },
+    { k: 'down', label: 'Сброс', type: 'number', unit: 'м', show: d => d.type !== 'Днёвка' },
+    { k: 'maxAlt', label: 'Макс. высота', type: 'number', unit: 'м' },
+    { k: 'hours', label: 'Ходовое время', type: 'number', unit: 'ч', show: d => d.type !== 'Днёвка' },
+    { k: 'cover', label: 'Покрытие', type: 'select', opts: COVERS, show: d => d.type !== 'Днёвка' },
+    { k: 'snow', label: 'Глубина снега', type: 'number', unit: 'см', show: d => d.cover === 'snow' && d.type !== 'Днёвка' },
+    { k: 'tday', label: 'Температура днём', type: 'number', unit: '°C', help: 'Ожидаемая дневная температура на маршруте. По ней считается жара (вода) и, вместе с ночной, холод.' },
+    { k: 'tnight', label: 'Температура ночью', type: 'number', unit: '°C' },
+    { k: 'precip', label: 'Осадки', type: 'select', opts: [['', 'Нет'], ['rain', 'Дождь'], ['snow', 'Снег']] },
+    { k: 'melt', label: 'Топим снег на воду', type: 'check', help: 'Если воды нет и её получают из снега, газа уходит больше.' },
+  ],
+  person: [
+    { k: 'name', label: 'Имя' }, { k: 'sex', label: 'Пол', type: 'seg', opts: SEX },
+    { k: 'age', label: 'Возраст', type: 'number', unit: 'лет' }, { k: 'height', label: 'Рост', type: 'number', unit: 'см' },
+    { k: 'weight', label: 'Вес', type: 'number', unit: KG }, { k: 'gear', label: 'Личное снаряжение', type: 'number', unit: KG },
+    { k: 'appetite', label: 'Коэффициент аппетита', type: 'number', help: 'Насколько человек ест больше или меньше обычного. 1.0 — как все, 1.2 — ест на пятую часть больше, 0.9 — меньше. Умножает его потребность в калориях, поэтому влияет на порции в раскладке. Если не знаешь, оставь 1.0; после похода приложение подскажет поправку.' },
+    { k: 'share', label: 'Доля общего груза', type: 'number', help: 'Какую часть общего груза (продукты, палатки, котлы, горелки) несёт человек. 1.0 — как остальные, меньше — несёт меньше, например 0.7. По этим долям на этапе «Покупки» считаются рюкзаки. Личное снаряжение сюда не входит, оно вводится отдельно.' },
+    { k: 'allergy', label: 'Аллергии' }, { k: 'veg', label: 'Вегетарианец', type: 'check' }, { k: 'dislike', label: 'Не ест' },
+  ],
+  gear: [
+    { k: 'common', label: 'Общественное снаряжение', type: 'number', unit: KG },
+    { k: 'maxM', label: 'Макс. рюкзак М', type: 'number', unit: KG }, { k: 'maxF', label: 'Макс. рюкзак Ж', type: 'number', unit: KG },
+  ],
+  food: [
+    { k: 'hot', label: 'Горячих приёмов в день', type: 'seg', opts: [['2', '2'], ['3', '3']] },
+    { k: 'lunchHot', label: 'Обед горячий (иначе перекус)', type: 'check' },
+  ],
+  prefs: [
+    { k: 'mode', label: 'Режим раскладки', type: 'seg', opts: [['hungry', 'Голодная'], ['std', 'Стандарт'], ['full', 'Сытая'], ['custom', 'Своя']] },
+    { k: 'custom', label: 'Своё покрытие', type: 'number', unit: '%', show: p => p.mode === 'custom' },
+    { k: 'breakfast', label: 'Завтраки', type: 'seg', opts: [['milk', 'Молочные'], ['meat', 'Мясные']] },
+    { k: 'sugar', label: 'Сахар', type: 'seg', opts: [['common', 'В раскладке'], ['personal', 'В личке']] },
+    { k: 'snacks', label: 'Перекусы на ходу', type: 'seg', opts: [['common', 'В раскладке'], ['personal', 'В личке']] },
+    { k: 'treat', label: 'Вкусняшка дня', type: 'check' },
+    { k: 'budget', label: 'Бюджет (необязательно)', type: 'number' },
+    { k: 'likes', label: 'Любимые блюда' }, { k: 'dislikes', label: 'Нелюбимые блюда' },
+  ],
+  drop: [
+    { k: 'after', label: 'После дня №', type: 'number' }, { k: 'what', label: 'Что в заброске' },
+  ],
+};
+
+const bound = (ctx, fields, obj, after) => root => bindForm(root, fields, obj, () => save(), () => { after?.(); ctx.rerender(); });
+const newDay = () => ({ type: 'Ходовой', date: '', km: null, up: null, down: null, maxAlt: null, hours: null, cover: 'trail', snow: null, tday: null, tnight: null });
+const newPerson = () => ({ id: crypto.randomUUID(), name: '', sex: 'M', age: null, height: null, weight: null, gear: null, appetite: getParam('appetite_def'), share: getParam('share_m'), allergy: '', veg: false, dislike: '' });
+const dayRow = (d, i) => `<li><button data-go="day" data-arg="${i}"><span>${i + 1} · ${esc(d.type)}</span><span class="muted">${d.type === 'Днёвка' ? '' : `${d.km ?? '—'} км · +${d.up ?? 0}/−${d.down ?? 0} · ${d.hours ?? '—'} ч`} ›</span></button></li>`;
+const link = (v, t, s) => `<li><button data-go="${v}">${t}<span class="muted">${s} ›</span></button></li>`;
+
+const views = {
+  // Основной экран вкладки «Поход» (рисуется внутри вкладки)
+  main(_, ctx) {
+    const sub = ctx.state.sub;
+    const gpx = sub === 'gpx' ? gpxSection(trip, save, ctx) : null;
+    const days = sub === 'manual'
+      ? `<h3>Дни</h3>${trip.days.length ? `<ul class="list">${trip.days.map(dayRow).join('')}</ul>` : '<p class="empty">Дней пока нет.</p>'}
+         <button class="btn" id="addday">Добавить день</button>`
+      : gpx.html;
+    return {
+      html: `<h2>Поход</h2><div class="subtabs"><button data-sub="gpx" class="${sub === 'gpx' ? 'on' : ''}">GPX-трек</button><button data-sub="manual" class="${sub === 'manual' ? 'on' : ''}">Вручную</button></div>
+        ${days}<h3>Общее</h3>${form(F.trip, trip)}
+        <ul class="list">${link('group', 'Группа', `${trip.group.length} чел`)}${link('gear', 'Снаряжение', trip.gear.common ? trip.gear.common + ' кг' : '—')}
+        ${link('food', 'Питание и заброски', `${trip.food.hot} горячих`)}${link('prefs', 'Предпочтения', '')}</ul>`,
+      bind(root) {
+        bound(ctx, F.trip, trip)(root);
+        gpx?.bind(root);
+        root.querySelectorAll('[data-sub]').forEach(b => b.onclick = () => { ctx.state.sub = b.dataset.sub; ctx.rerender(); });
+        root.querySelector('#addday')?.addEventListener('click', () => { trip.days.push(newDay()); save(); ctx.go('day', trip.days.length - 1); });
+      },
+    };
+  },
+
+  day(i, ctx) {
+    const d = trip.days[i];
+    return {
+      html: `${back('', 'Поход')}<h2>День ${i + 1}</h2>${form(F.day, d)}
+        <button class="btn" id="copy">Копировать день</button><button class="btn danger" id="del">Удалить день</button>`,
+      bind(root) {
+        bound(ctx, F.day, d)(root);
+        root.querySelector('#copy').onclick = () => { trip.days.splice(i + 1, 0, { ...d }); save(); ctx.go('day', i + 1, true); };
+        root.querySelector('#del').onclick = () => { trip.days.splice(i, 1); save(); ctx.go(''); };
+      },
+    };
+  },
+
+  group(_, ctx) {
+    return {
+      html: `${back('', 'Поход')}<h2>Группа</h2>
+        ${trip.group.length ? `<ul class="list">${trip.group.map((p, i) => `<li><button data-go="person" data-arg="${i}"><span>${esc(p.name) || 'Без имени'} · ${p.sex === 'F' ? 'Ж' : 'М'}${p.age ? ' · ' + p.age : ''}</span><span class="muted">${p.weight ? p.weight + ' кг' : ''} ›</span></button></li>`).join('')}</ul>` : '<p class="empty">Участников пока нет.</p>'}
+        <button class="btn" id="add">Добавить участника</button>`,
+      bind(root) { root.querySelector('#add').onclick = () => { trip.group.push(newPerson()); save(); ctx.go('person', trip.group.length - 1); }; },
+    };
+  },
+
+  person(i, ctx) {
+    const p = trip.group[i];
+    const prevSex = p.sex;
+    return {
+      html: `${back('group', 'Группа')}<h2>Участник</h2>${form(F.person, p)}<button class="btn danger" id="del">Удалить участника</button>`,
+      bind(root) {
+        bindForm(root, F.person, p, k => {
+          if (k === 'sex' && p.share === getParam(prevSex === 'F' ? 'share_f' : 'share_m')) p.share = getParam(p.sex === 'F' ? 'share_f' : 'share_m');
+          save();
+        }, () => ctx.rerender());
+        root.querySelector('#del').onclick = () => { trip.group.splice(i, 1); save(); ctx.go('group'); };
+      },
+    };
+  },
+
+  gear: (_, ctx) => ({ html: `${back('', 'Поход')}<h2>Снаряжение</h2>${form(F.gear, trip.gear)}`, bind: bound(ctx, F.gear, trip.gear) }),
+  prefs: (_, ctx) => ({ html: `${back('', 'Поход')}<h2>Предпочтения</h2>${form(F.prefs, trip.prefs)}`, bind: bound(ctx, F.prefs, trip.prefs) }),
+
+  food(_, ctx) {
+    return {
+      html: `${back('', 'Поход')}<h2>Питание и заброски</h2><div id="foodf">${form(F.food, trip.food)}</div>
+        <p class="muted">Аварийный запас: ${getParam('reserve_days')} дн. (меняется в Настройках)</p><h3>Заброски</h3>
+        ${trip.drops.map((d, i) => `<div class="drop">${form(F.drop, d)}<button class="mini" data-deldrop="${i}">Удалить</button></div>`).join('') || '<p class="empty">Заброски не заданы.</p>'}
+        <button class="btn" id="adddrop">Добавить заброску</button>`,
+      bind(root) {
+        bound(ctx, F.food, trip.food)(root.querySelector('#foodf'));
+        root.querySelectorAll('.drop').forEach((el, i) => bindForm(el, F.drop, trip.drops[i], save, () => ctx.rerender()));
+        root.querySelector('#adddrop').onclick = () => { trip.drops.push({ after: null, what: '' }); save(); ctx.rerender(); };
+        root.querySelectorAll('[data-deldrop]').forEach(b => b.onclick = () => { trip.drops.splice(+b.dataset.deldrop, 1); save(); ctx.rerender(); });
+      },
+    };
+  },
+};
+
+return {newTrip, loadTrip, getTrip, saveTrip, setTrip, views};
+})();
+__m['engine.js'] = (() => {
+// Движок расчёта: только чистые функции. Все коэффициенты приходят в объекте P (из defaults.js + правки пользователя).
+
+const bmr = p => 10 * p.weight + 6.25 * p.height - 5 * p.age + (p.sex === 'F' ? -161 : 5);
+
+function eta(cover, snowCm, P) {
+  if (cover === 'snow') return P.eta_snow_a + P.eta_snow_b * (snowCm || 0);
+  return { asphalt: P.eta_asphalt, dirt: P.eta_dirt, trail: P.eta_trail, bush: P.eta_bush, swamp: P.eta_swamp, sand: P.eta_sand }[cover] ?? P.eta_trail;
+}
+
+// Пандольф: W вес тела кг, L рюкзак кг, v м/с, G уклон % (≥0 для формулы), et — η. Возвращает ватты.
+function pandolf(W, L, v, G, et) {
+  return 1.5 * W + 2 * (W + L) * (L / W) ** 2 + et * (W + L) * (1.5 * v * v + 0.35 * v * G);
+}
+
+const descentK = (g, P) => { const a = Math.abs(g); return a <= P.descent_th_low ? P.descent_k_low : a <= P.descent_th_high ? P.descent_k_mid : P.descent_k_high; };
+const clip = (g, P) => Math.max(-P.slope_clip, Math.min(P.slope_clip, g));
+
+// Ходьба за день по сводным данным дня: условно делим путь на подъём и спуск с одинаковой скоростью
+function walkKcal(day, W, L, P) {
+  const hours = day.hours || 0, D = (day.km || 0) * 1000;
+  if (!hours || !D) return { kcal: 0, parts: [] };
+  const v = D / (hours * 3600), up = day.up || 0, down = day.down || 0, et = eta(day.cover, day.snow, P);
+  const sum = up + down, Du = sum ? D * up / sum : D / 2, Dd = D - Du;
+  const parts = []; let kcal = 0;
+  const add = (name, dist, g, mult) => {
+    if (dist <= 0) return;
+    const gc = clip(g, P), h = hours * dist / D;
+    const w = (mult ? pandolf(W, L, v, 0, et) * mult : pandolf(W, L, v, gc, et));
+    const k = w * h * P.kcal_per_wh * P.pandolf_corr;
+    kcal += k; parts.push({ name, watts: w, hours: h, kcal: k, slope: gc });
+  };
+  add('Подъём', Du, Du ? up / Du * 100 : 0);
+  add('Спуск', Dd, Dd ? -down / Dd * 100 : 0, descentK(Dd ? down / Dd * 100 : 0, P));
+  return { kcal, parts, v };
+}
+
+const tavg = d => (d.tday != null && d.tnight != null) ? (d.tday + d.tnight) / 2 : (d.tday ?? d.tnight ?? null);
+
+// Потребность участника на день с разбивкой по шагам
+function personNeed(person, day, L, P) {
+  const B = bmr(person), rest = day.type === 'Днёвка', hours = rest ? 0 : (day.hours || 0);
+  const w = rest ? { kcal: 0, parts: [] } : walkKcal(day, person.weight, L, P);
+  const camp = rest ? B * P.rest_k : Math.max(0, 24 - hours) * B / 24 * P.camp_k;
+  const t = tavg(day), cold = t != null ? P.cold_k * Math.max(0, P.cold_t0 - t) : 0;
+  const base = w.kcal + camp + cold;
+  const altK = day.maxAlt > P.alt_start ? 1 + P.alt_pct / 100 * (day.maxAlt - P.alt_start) / 1000 : 1;
+  const personal = person.appetite || 1, general = 1 + P.general_pct / 100;
+  const total = base * altK * personal * general;
+  return { bmr: B, walk: w.kcal, parts: w.parts, camp, cold, t, base, altK, personal, general, total, rest };
+}
+
+const coverage = (mode, custom, P) => ({ hungry: P.cov_hungry, std: P.cov_std, full: P.cov_full, custom: custom ?? P.cov_custom })[mode] ?? P.cov_std;
+
+// Множитель аппетита по дням: в первые app_days дней на новой высоте
+function appetiteFactors(days, P) {
+  const band = d => (d.maxAlt >= 5000 ? 3 : d.maxAlt >= 4000 ? 2 : d.maxAlt >= 3000 ? 1 : 0);
+  const mult = [1, P.app_alt1, P.app_alt2, P.app_alt3];
+  let top = 0, entry = -99, ebands = 0;
+  return days.map((d, i) => {
+    const b = band(d);
+    if (b > top) { top = b; entry = i; ebands = b; }
+    return (i - entry < P.app_days && ebands > 0) ? mult[ebands] : 1;
+  });
+}
+
+function macros(kcal, alt, P) {
+  const f = alt > P.macro_alt ? P.macro_f_high : P.macro_f_low, c = alt > P.macro_alt ? P.macro_c_high : P.macro_c_low;
+  const p = kcal / (4 + 9 * f + 4 * c);
+  return { p, f: p * f, c: p * c };
+}
+
+function fuelPerPerson(day, P) {
+  if (day.type === 'Днёвка' && !day.melt) return P.fuel_nosnow;
+  if (day.maxAlt > P.fuel_cold_alt || (tavg(day) ?? 99) < -10) return P.fuel_cold;
+  return day.melt || day.cover === 'snow' || day.precip === 'snow' ? P.fuel_snow : P.fuel_nosnow;
+}
+
+const waterLiters = (person, day, P) => person.weight * P.water_ml / 1000 + ((day.tday ?? -99) > P.hot_t ? P.hot_l : 0);
+
+// Полный расчёт похода. Возвращает {days, summary, warnings}
+function computeTrip(trip, P) {
+  const g = trip.group.filter(p => p.weight && p.height && p.age), n = g.length, days = trip.days;
+  const warnings = [];
+  if (!n) return { days: [], summary: null, warnings: ['Добавьте участников с возрастом, ростом и весом.'] };
+  if (!days.length) return { days: [], summary: null, warnings: ['Добавьте дни похода.'] };
+  const cov = coverage(trip.prefs.mode, trip.prefs.custom, P) / 100;
+  const apf = appetiteFactors(days, P), shareSum = g.reduce((s, p) => s + (p.share || 1), 0);
+  const out = days.map((d, i) => {
+    const left = days.length - i + P.reserve_days;
+    const foodKg = n * (P.ref_std * cov / 0.67) * left / 1000; // грубая оценка веса еды в рюкзаках до расчёта меню
+    const per = g.map(p => {
+      const share = (p.share || 1) / shareSum, L = (p.gear || 0) + (trip.gear.common || 0) * share + foodKg * share;
+      const nd = personNeed(p, d, L, P), target = nd.total * cov * apf[i];
+      return { p, L, ...nd, target, grams: target / P.kcal100 * 100 };
+    });
+    const need = per.reduce((s, x) => s + x.total, 0), target = per.reduce((s, x) => s + x.target, 0);
+    const tgtGrams = target / P.kcal100 * 100;
+    return { i, d, per, need, target, grams: tgtGrams, cover: need ? target / need : 0, appetite: apf[i], fuel: fuelPerPerson(d, P) * n, water: per.reduce((s, x) => s + waterLiters(x.p, d, P), 0), mac: macros(target / n, d.maxAlt || 0, P) };
+  });
+  const tot = out.reduce((s, x) => s + x.target, 0), totNeed = out.reduce((s, x) => s + x.need, 0), gramsAll = out.reduce((s, x) => s + x.grams, 0);
+  out.forEach(x => { if (x.cover * 100 < P.cov_warn - 0.01) warnings.push(`День ${x.i + 1}: покрытие ${Math.round(x.cover * 100)}% ниже порога ${P.cov_warn}%`); });
+  g.forEach(p => {
+    const lim = p.sex === 'F' ? trip.gear.maxF : trip.gear.maxM;
+    const x = out[0].per.find(q => q.p === p);
+    if (lim && x.L > lim) warnings.push(`${p.name || 'Участник'}: рюкзак в начале ≈ ${x.L.toFixed(1)} кг при лимите ${lim} кг. Рассмотрите заброску или меньшую граммовку.`);
+  });
+  const reserveKcal = P.reserve_days * (out.reduce((s, x) => s + x.target, 0) / days.length);
+  return {
+    days: out, warnings,
+    summary: { days: days.length, kcal: tot, need: totNeed, grams: gramsAll, gramsPerPersonDay: gramsAll / n / days.length, kcalPerPersonDay: tot / n / days.length, cover: totNeed ? tot / totNeed : 0, fuel: out.reduce((s, x) => s + x.fuel, 0), water: out.reduce((s, x) => s + x.water, 0), reserveKcal, n },
+  };
+}
+
+return {bmr, eta, pandolf, descentK, walkKcal, personNeed, coverage, appetiteFactors, macros, fuelPerPerson, waterLiters, computeTrip};
+})();
+__m['menu.js'] = (() => {
+// Генератор меню: блюдо = шаблон из слотов, подбор с ротацией, учётом ограничений, свежести и закреплённых блюд.
+// Слот: [роль, ключевые слова через | (по названию продукта) или cat:категория, доля ккал блюда, необязательный, фикс [г на группу, г на человека]]
+// Приёмы: b завтрак, c обед холодный, h обед горячий, d ужин, s перекусы на ходу.
+const S = (role, kw, frac, opt = 0, fixed = null) => ({ role, kw, frac, opt, fixed });
+const D = (id, name, meal, tags, ...slots) => ({ id, name, meal, tags, slots });
+
+const MEALS = { b: 'Завтрак', l: 'Обед', d: 'Ужин', s: 'Перекусы' };
+const DISHES = [
+  // завтраки молочные
+  D('b1', 'Овсянка с молоком и сухофруктами', 'b', 'milk', S('основа', 'Овсяные хлопья|Овсянка быстрого', .55), S('молоко', 'Молоко сухое', .15), S('сладкое', 'Курага|Изюм|Чернослив|Финики', .2), S('жир', 'Масло топлёное|Масло сливочное', .1), S('соль', 'Соль', 0, 0, [3, 0.5])),
+  D('b2', 'Манная каша с вареньем', 'b', 'milk', S('основа', 'Манка', .55), S('молоко', 'Молоко сухое', .2), S('сладкое', 'Варенье|Мёд', .15), S('жир', 'Масло топлёное|Масло сливочное', .1)),
+  D('b3', 'Рисовая каша с изюмом', 'b', 'milk', S('основа', 'Рис круглозёрный', .55), S('молоко', 'Молоко сухое', .2), S('сладкое', 'Изюм|Курага', .15), S('жир', 'Масло топлёное|Масло сливочное', .1)),
+  D('b4', 'Пшённая каша с курагой', 'b', 'milk', S('основа', 'Пшено', .55), S('молоко', 'Молоко сухое', .15), S('сладкое', 'Курага|Изюм', .2), S('жир', 'Масло топлёное|Масло сливочное', .1)),
+  D('b5', 'Мюсли с молоком и орехами', 'b', 'milk', S('основа', 'Мюсли|Овсянка быстрого', .6), S('молоко', 'Молоко сухое', .2), S('орехи', 'Грецкий|Арахис|Миндаль', .2)),
+  D('b6', 'Кукурузная каша с сыром', 'b', 'milk', S('основа', 'Кукурузная крупа', .55), S('сыр', 'Сыр твёрдый|Сыр плавленый', .25), S('жир', 'Масло топлёное|Масло сливочное', .2)),
+  D('b7', 'Каша быстрая с молоком', 'b', 'milk', S('основа', 'Каша быстрая в пакете|Овсянка быстрого', .8), S('молоко', 'Молоко сухое', .2)),
+  // завтраки мясные
+  D('b8', 'Гречка с тушёнкой', 'b', 'meat', S('основа', 'Гречка', .5), S('мясо', 'Тушёнка', .35), S('жир', 'Масло топлёное|Масло подсолнечное', .15), S('лук', 'Лук репчатый', 0, 1, [50, 10])),
+  D('b9', 'Рис с колбасой', 'b', 'meat', S('основа', 'Рис', .5), S('мясо', 'Колбаса сырокопчёная|Казы|Колбаса сыровяленая', .35), S('жир', 'Масло топлёное|Масло подсолнечное', .15)),
+  D('b10', 'Лапша с яйцом и сыром', 'b', 'meat', S('основа', 'Лапша быстрого|Вермишель', .55), S('сыр', 'Сыр твёрдый|Сыр плавленый', .25), S('жир', 'Масло топлёное|Масло подсолнечное', .2)),
+  D('b11', 'Пюре с салом и сухарями', 'b', 'meat', S('основа', 'Картофельное пюре', .5), S('сало', 'Сало', .3), S('хлеб', 'Сухари', .2)),
+  // обед холодный
+  D('c1', 'Бутерброды: сухари, сыр, колбаса', 'c', '', S('хлеб', 'Сухари|Лаваш|Лепёшка', .4), S('сыр', 'Сыр твёрдый|Сыр копчёный|Сыр плавленый', .3), S('мясо', 'Колбаса сырокопчёная|Казы|Шұжық|Колбаса сыровяленая', .3)),
+  D('c2', 'Лепёшка с халвой и орехами', 'c', '', S('хлеб', 'Лаваш|Лепёшка|Сухари', .4), S('сладкое', 'Халва', .35), S('орехи', 'Арахис|Грецкий|Миндаль', .25)),
+  D('c3', 'Хлебцы с паштетом и сыром', 'c', '', S('хлеб', 'Хлебцы|Крекер', .4), S('паштет', 'Паштет', .3), S('сыр', 'Сыр твёрдый|Сыр плавленый', .3)),
+  D('c4', 'Курт с сухарями и сухофруктами', 'c', '', S('хлеб', 'Сухари', .4), S('сыр', 'Курт|Иримшик', .3), S('сладкое', 'Курага|Изюм|Финики', .3)),
+  D('c5', 'Крекеры с салом и чесноком', 'c', 'pork', S('хлеб', 'Крекер|Сухари', .4), S('сало', 'Сало|Грудинка', .5), S('чеснок', 'Чеснок', 0, 1, [20, 3])),
+  D('c6', 'Лаваш с сыром и мёдом', 'c', '', S('хлеб', 'Лаваш|Лепёшка|Сухари', .45), S('сыр', 'Сыр твёрдый|Брынза|Сыр плавленый', .3), S('мёд', 'Мёд|Варенье', .25)),
+  // обед горячий (супы)
+  D('h1', 'Гороховый суп с копчёностями', 'h', 'hot', S('основа', 'Суп в пакете (гороховый)', .55), S('мясо', 'Грудинка|Колбаса сырокопчёная|Сало', .3), S('хлеб', 'Сухари', .15)),
+  D('h2', 'Лапша куриная с сухарями', 'h', 'hot', S('основа', 'Суп в пакете (куриный', .6), S('хлеб', 'Сухари', .2), S('сыр', 'Сыр твёрдый', .2)),
+  D('h3', 'Борщ из пакета', 'h', 'hot', S('основа', 'Борщ в пакете', .5), S('мясо', 'Тушёнка|Сало', .3), S('хлеб', 'Сухари', .2)),
+  D('h4', 'Харчо с лавашом', 'h', 'hot', S('основа', 'Харчо в пакете', .55), S('мясо', 'Тушёнка|Колбаса', .25), S('хлеб', 'Лаваш|Сухари', .2)),
+  // ужины
+  D('d1', 'Гречка с тушёнкой', 'd', 'hot', S('основа', 'Гречка', .45), S('мясо', 'Тушёнка говяжья', .35), S('жир', 'Масло топлёное|Масло подсолнечное', .15), S('сыр', 'Сыр твёрдый', .05, 1), S('лук', 'Лук репчатый', 0, 1, [100, 15]), S('соль', 'Соль', 0, 0, [3, 0.5])),
+  D('d2', 'Плов с тушёнкой', 'd', 'hot', S('основа', 'Рис', .5), S('мясо', 'Тушёнка', .3), S('жир', 'Масло подсолнечное|Масло топлёное', .2), S('морковь', 'Морковь', 0, 1, [100, 20]), S('лук', 'Лук репчатый', 0, 1, [100, 15])),
+  D('d3', 'Макароны по-флотски', 'd', 'hot', S('основа', 'Макароны', .5), S('мясо', 'Тушёнка', .35), S('жир', 'Масло подсолнечное|Масло топлёное', .15), S('томат', 'Томатная паста', 0, 1, [30, 5])),
+  D('d4', 'Пшено с тушёнкой и луком', 'd', 'hot', S('основа', 'Пшено', .5), S('мясо', 'Тушёнка', .35), S('жир', 'Масло топлёное|Масло подсолнечное', .15), S('лук', 'Лук репчатый', 0, 1, [100, 15])),
+  D('d5', 'Булгур с копчёностями', 'd', 'hot', S('основа', 'Булгур|Кускус', .5), S('мясо', 'Колбаса|Казы|Грудинка', .3), S('жир', 'Масло топлёное|Масло подсолнечное', .2), S('овощи', 'Овощи сушёные', 0, 1, [20, 5])),
+  D('d6', 'Чечевичная похлёбка с салом', 'd', 'hot', S('основа', 'Чечевица красная', .5), S('сало', 'Сало|Грудинка', .3), S('хлеб', 'Сухари', .2), S('лук', 'Лук репчатый', 0, 1, [100, 15])),
+  D('d7', 'Картофельное пюре с тушёнкой', 'd', 'hot', S('основа', 'Картофельное пюре', .5), S('мясо', 'Тушёнка', .35), S('жир', 'Масло топлёное|Масло сливочное', .15)),
+  D('d8', 'Лапша с тушёнкой и сыром', 'd', 'hot', S('основа', 'Макароны|Вермишель|Лапша быстрого', .5), S('мясо', 'Тушёнка|Колбаса', .3), S('сыр', 'Сыр твёрдый', .2)),
+  D('d9', 'Рис с грибами и сыром', 'd', 'hot', S('основа', 'Рис', .5), S('грибы', 'Грибы сушёные', .05, 1), S('сыр', 'Сыр твёрдый|Сыр копчёный', .25), S('жир', 'Масло топлёное|Масло подсолнечное', .2)),
+  D('d10', 'Фасоль с томатом и сухарями', 'd', 'hot', S('основа', 'Фасоль|Нут', .5), S('мясо', 'Колбаса|Сало|Тушёнка', .25), S('жир', 'Масло подсолнечное|Масло топлёное', .15), S('хлеб', 'Сухари', .1)),
+  D('d11', 'Горячее из соевого мяса с рисом', 'd', 'hot veg', S('основа', 'Рис', .55), S('соя', 'Соевое мясо', .2), S('жир', 'Масло подсолнечное|Масло топлёное', .25)),
+  D('d12', 'Овощное рагу с булгуром', 'd', 'hot veg', S('основа', 'Булгур|Кускус', .55), S('овощи', 'Овощи сушёные|Картофель сушёный', .1), S('жир', 'Масло подсолнечное|Масло топлёное', .2), S('сыр', 'Сыр твёрдый', .15, 1)),
+  // перекусы
+  D('s1', 'Орехи и сухофрукты', 's', '', S('орехи', 'Грецкий|Арахис|Миндаль|Смесь орехов', .5), S('сухофрукты', 'Курага|Изюм|Финики|Чернослив|Инжир', .5)),
+  D('s2', 'Шоколад и козинаки', 's', '', S('шоколад', 'Шоколад', .5), S('козинаки', 'Козинаки|Халва', .5)),
+  D('s3', 'Батончики и печенье', 's', '', S('батончик', 'Батончик', .5), S('печенье', 'Печенье', .5)),
+  D('s4', 'Халва и леденцы', 's', '', S('халва', 'Халва', .7), S('леденцы', 'Леденцы|Конфеты', .3)),
+  D('s5', 'Курага с грецким орехом и шоколадом', 's', '', S('курага', 'Курага|Инжир', .35), S('орех', 'Грецкий|Миндаль', .35), S('шоколад', 'Шоколад', .3)),
+  D('s6', 'Зефир, мёд и орехи', 's', '', S('сладкое', 'Зефир|Мёд|Щербет', .5), S('орехи', 'Арахис|Фундук|Грецкий', .5)),
+];
+
+// ---- ограничения и свежесть ----
+const has = (txt, w) => w && txt.toLowerCase().includes(w.toLowerCase());
+function allowed(prod, group) {
+  const tags = (prod.tags || '').split(/\s+/), nm = prod.name;
+  return group.every(p => !((p.veg && tags.includes('meat')) || (p.allergy && p.allergy.split(/[,;]/).some(a => a.trim() && (has(nm, a.trim()) || tags.includes(a.trim().toLowerCase()))))
+    || (p.dislike && p.dislike.split(/[,;]/).some(a => a.trim() && has(nm, a.trim())))));
+}
+const freshOk = (prod, dayIdx, temp, P) => !prod.fresh || dayIdx + 1 <= ((temp ?? 15) > 20 ? prod.hot : prod.cool);
+
+function resolve(slot, ctx, salt) {
+  const list = slot.kw.split('|').flatMap(k => ctx.prods.filter(p => p.on && p.name.toLowerCase().includes(k.toLowerCase())));
+  const uniq = [...new Set(list)].filter(p => allowed(p, ctx.group) && freshOk(p, ctx.dayIdx, ctx.temp));
+  if (!uniq.length) return null;
+  return uniq[(ctx.dayIdx + salt) % uniq.length];
+}
+
+function dishPossible(dish, ctx) {
+  if (ctx.prefs.dislikes && ctx.prefs.dislikes.split(/[,;]/).some(a => a.trim() && has(dish.name, a.trim()))) return false;
+  return dish.slots.every(s => s.opt || resolve(s, ctx, 0));
+}
+
+// Строит позиции блюда на бюджет ккал группы (kcal) и n человек
+function buildItems(dish, kcal, ctx, salt = 0, adj = {}) {
+  const items = [];
+  dish.slots.forEach((s, k) => {
+    const p = resolve(s, ctx, salt + k);
+    if (!p) return;
+    let g;
+    if (s.fixed) g = s.fixed[0] + s.fixed[1] * ctx.n;
+    else g = p.kcal > 0 ? kcal * s.frac / p.kcal * 100 : 0;
+    if (adj[p.id]) g += adj[p.id] * ctx.n;
+    if (g > 0) items.push({ pid: p.id, g: Math.max(5, Math.round(g / (g > 400 ? 10 : 5)) * (g > 400 ? 10 : 5)), role: s.role });
+  });
+  return items;
+}
+
+const itemsKcal = (items, prods) => items.reduce((s, it) => s + (prods.find(p => p.id === it.pid)?.kcal || 0) * it.g / 100, 0);
+
+// Полная сборка меню. calc — результат computeTrip; старое меню (закреплённое сохраняется)
+function buildMenu(trip, calc, prods, P, old = null, seed = 0) {
+  const group = trip.group, n = group.filter(p => p.weight).length || 1, pr = trip.prefs;
+  const split = { b: P.split_b, l: P.split_l, d: P.split_d, s: P.split_s };
+  const lunchHot = trip.food.lunchHot || String(trip.food.hot) === '3';
+  const usage = {}, last = {}, menu = [], adj = trip.adj?.product || {};
+  const mealDishes = m => DISHES.filter(d => !(trip.dishOff || []).includes(d.id) && (m === 'l' ? d.meal === (lunchHot ? 'h' : 'c') : d.meal === m)).concat((trip.customDishes || []).filter(d => (m === 'l' ? d.meal === (lunchHot ? 'h' : 'c') : d.meal === m)));
+  calc.days.forEach((cd, i) => {
+    const day = { };
+    const rest = cd.d.type === 'Днёвка';
+    const ctx = { prods, group, dayIdx: i, temp: cd.d.tday, n, prefs: pr };
+    ['b', 'l', 'd', 's'].forEach((m, mi) => {
+      const prev = old?.days?.[i]?.[m];
+      const budget = budgetOf(trip, cd, m, P);
+      if (prev?.pin && prev.dish) { day[m] = { ...prev, items: prev.custom ? prev.items : buildItems(findDish(trip, prev.dish), budget, ctx, seed, adj) }; if (!day[m].items.length) day[m].items = prev.items; usage[prev.dish] = (usage[prev.dish] || 0) + 1; last[m] = prev.dish; return; }
+      if (prev?.empty) { day[m] = { empty: true, items: [] }; return; }
+      let cands = mealDishes(m).filter(d => dishPossible(d, ctx));
+      if (m === 'b') { const pref = cands.filter(d => d.tags.includes(pr.breakfast)); if (pref.length) cands = pref; }
+      if (n && group.some(p => p.veg)) { const v = cands.filter(d => !d.tags.includes('meat') || d.tags.includes('veg')); if (v.length) cands = v; }
+      cands.sort((a, b) => {
+        const pa = (usage[a.id] || 0) >= P.base_max ? 100 : 0, pb = (usage[b.id] || 0) >= P.base_max ? 100 : 0;
+        const ra = recent(menu, i, a.id, P.rot_days) ? 50 : 0, rb = recent(menu, i, b.id, P.rot_days) ? 50 : 0;
+        const rating = id => -(trip.ratings?.[id] || 0) * 5;
+        const h = id => ((id.charCodeAt(0) * 31 + id.length * 7 + i * 13 + mi * 5 + seed * 17 + (id.charCodeAt(1) || 0) * 3) % 10);
+        return (pa + ra + (usage[a.id] || 0) * 3 + rating(a.id) + h(a.id)) - (pb + rb + (usage[b.id] || 0) * 3 + rating(b.id) + h(b.id));
+      });
+      // основа не повторяется два приёма подряд
+      const dish = cands.find(d => d.id !== last[m] && !sameBase(d, last)) || cands[0];
+      if (!dish) { day[m] = { empty: true, items: [], dish: null }; return; }
+      usage[dish.id] = (usage[dish.id] || 0) + 1; last[m] = dish.id; last._prevBase = baseOf(dish);
+      day[m] = { dish: dish.id, items: buildItems(dish, budget, ctx, seed + i, adj), pin: false };
+    });
+    // добор до цели перекусами
+    const eaten = ['b', 'l', 'd', 's'].reduce((s, m) => s + itemsKcal(day[m]?.items || [], prods), 0);
+    const diff = cd.target - eaten;
+    if (day.s?.items?.length && Math.abs(diff) > cd.target * .02) {
+      const sk = itemsKcal(day.s.items, prods), f = Math.max(0.3, Math.min(2.5, (sk + diff) / (sk || 1)));
+      day.s.items = day.s.items.map(it => ({ ...it, g: Math.max(5, Math.round(it.g * f / 5) * 5) }));
+    }
+    menu.push(day);
+  });
+  return { days: menu, seed };
+}
+const baseOf = d => d.slots[0]?.kw;
+const sameBase = (d, last) => last._prevBase && baseOf(d) === last._prevBase;
+const recent = (menu, i, id, k) => menu.slice(Math.max(0, i - k + 1)).some(day => ['b', 'l', 'd', 's'].some(m => day[m]?.dish === id));
+const findDish = (trip, id) => DISHES.find(d => d.id === id) || (trip.customDishes || []).find(d => d.id === id);
+const dishesFor = (trip, m) => {
+  const lunchHot = trip.food.lunchHot || String(trip.food.hot) === '3';
+  const t = m === 'l' ? (lunchHot ? 'h' : 'c') : m;
+  return [...DISHES, ...(trip.customDishes || [])].filter(d => d.meal === t && !(trip.dishOff || []).includes(d.id));
+};
+
+// Проверки меню: повторы основы подряд, аллергии, порча
+function menuWarnings(trip, menu, prods, P) {
+  const w = [], pid = id => prods.find(p => p.id === id);
+  menu.days.forEach((day, i) => {
+    const t = trip.days[i]?.tday;
+    ['b', 'l', 'd', 's'].forEach(m => (day[m]?.items || []).forEach(it => {
+      const p = pid(it.pid); if (!p) return;
+      if (!allowed(p, trip.group)) w.push(`День ${i + 1}, ${MEALS[m].toLowerCase()}: «${p.name}» не подходит кому-то из группы`);
+      if (p.fresh && i + 1 > ((t ?? 15) > 20 ? p.hot : p.cool)) w.push(`«${p.name}» испортится к дню ${i + 1}${t != null ? ` при ${Math.round(t)} °C` : ''}`);
+    }));
+    if (i && day.d?.dish && day.d.dish === menu.days[i - 1].d?.dish) w.push(`Ужин повторяется в днях ${i} и ${i + 1}`);
+  });
+  return [...new Set(w)];
+}
+
+const budgetOf = (trip, cd, m, P) => cd.target * ({ b: P.split_b, l: P.split_l, d: P.split_d, s: P.split_s }[m]) / 100 * ((trip.adj?.meal?.[m] ?? 0) / 100 + 1) * ((trip.adj?.dayType?.[cd.d.type] ?? 0) / 100 + 1);
+
+// Новое блюдо на один приём (ручная замена / пересборка блюда)
+function mealFor(trip, calc, prods, P, i, m, dishId, salt = 0) {
+  const cd = calc.days[i], n = trip.group.filter(p => p.weight).length || 1;
+  const ctx = { prods, group: trip.group, dayIdx: i, temp: cd.d.tday, n, prefs: trip.prefs };
+  return { dish: dishId, items: buildItems(findDish(trip, dishId), budgetOf(trip, cd, m, P), ctx, salt, trip.adj?.product || {}), pin: true };
+}
+const possibleFor = (trip, prods, i, m) => dishesFor(trip, m).filter(d => dishPossible(d, { prods, group: trip.group, dayIdx: i, temp: trip.days[i]?.tday, n: 1, prefs: trip.prefs }));
+
+return {MEALS, DISHES, allowed, dishPossible, buildItems, itemsKcal, buildMenu, findDish, dishesFor, menuWarnings, budgetOf, mealFor, possibleFor};
+})();
+__m['calcview.js'] = (() => {
+// Вкладка «Расчёт»: сводка, дни с пояснением «Почему столько?», меню (сетка день × приём), замена блюд.
+const {allParams, opts} = __m['params.js'];
+const {computeTrip} = __m['engine.js'];
+const {MEALS, buildMenu, mealFor, possibleFor, findDish, itemsKcal, menuWarnings} = __m['menu.js'];
+const {products, byId} = __m['pstore.js'];
+const {getTrip, saveTrip} = __m['trip.js'];
+const {esc} = __m['ui.js'];
+
+const n0 = x => Math.round(x).toLocaleString('ru');
+const kg = g => (g / 1000).toFixed(1).replace('.', ',');
+const M4 = ['b', 'l', 'd', 's'];
+
+function sig(trip) {
+  return JSON.stringify([trip.group.map(p => [p.weight, p.height, p.age, p.sex, p.appetite, p.share, p.gear, p.veg, p.allergy, p.dislike]), trip.days.map(d => [d.type, d.km, d.up, d.down, d.hours, d.cover, d.snow, d.maxAlt, d.tday, d.tnight, d.melt]), trip.prefs, trip.food, trip.gear, trip.adj, trip.dishOff, products().filter(p => p.on).length, allParams()]);
+}
+
+// Возвращает {calc, menu, P}; пересобирает меню, если исходные данные изменились (закреплённое остаётся)
+function ensure(force = false) {
+  const trip = getTrip(), P = allParams(), calc = computeTrip(trip, P);
+  trip.ratings = opts.ratings || {};
+  if (!calc.summary) return { calc, menu: null, P };
+  const s = sig(trip);
+  if (force || !trip.menu || trip.menu.sig !== s || trip.menu.days.length !== trip.days.length) {
+    const seed = force ? (trip.menu?.seed || 0) + 1 : (trip.menu?.seed || 0);
+    trip.menu = { ...buildMenu(trip, calc, products(), P, trip.menu, seed), sig: s };
+    saveTrip();
+  }
+  return { calc, menu: trip.menu, P };
+}
+
+const menuKcal = (day, prods) => M4.reduce((s, m) => s + itemsKcal(day[m]?.items || [], prods), 0);
+const menuGrams = day => M4.reduce((s, m) => s + (day[m]?.items || []).reduce((a, i) => a + i.g, 0), 0);
+
+function why(cd, P) {
+  const rows = cd.per.map(x => `<tr><td>${esc(x.p.name || 'Участник')}</td><td>${n0(x.bmr)}</td><td>${n0(x.walk)}</td><td>${n0(x.camp)}</td><td>${n0(x.cold)}</td><td>×${x.altK.toFixed(2)}</td><td>×${x.personal.toFixed(2)}${x.general !== 1 ? ' ×' + x.general.toFixed(2) : ''}</td><td><b>${n0(x.total)}</b></td></tr>`).join('');
+  const x = cd.per[0], parts = x.parts.map(p => `${p.name}: ${n0(p.watts)} Вт, ${p.hours.toFixed(1)} ч, ${n0(p.kcal)} ккал`).join('; ');
+  return `<details><summary>Почему столько?</summary><div class="why"><div class="tbl"><table><tr><th></th><th>Обмен</th><th>Ходьба</th><th>Остаток суток</th><th>Холод</th><th>Высота</th><th>Личн.</th><th>Итого</th></tr>${rows}</table></div>
+    <p class="muted small">Обмен — расход покоя за сутки (Миффлин — Сан Жеор). Ходьба — по Пандольфу с учётом рюкзака (${x.L.toFixed(1)} кг у ${esc(x.p.name || 'первого участника')}), покрытия и поправки на недооценку. ${parts ? 'Участки у него: ' + esc(parts) + '. ' : ''}Остаток суток — ${cd.d.type === 'Днёвка' ? 'днёвка: обмен × ' + P.rest_k : 'остаток часов × обмен × ' + P.camp_k}. Холод — ${P.cold_k} ккал на градус ниже ${P.cold_t0} °C${x.t != null ? ` (сегодня ${x.t.toFixed(0)} °C)` : ', температура не задана'}. Высота — +${P.alt_pct}% на 1000 м выше ${P.alt_start} м. Личный — коэффициент аппетита и общая поправка ${P.general_pct}%.</p>
+    <p class="small">Цель раскладки = потребность × покрытие${cd.appetite < 1 ? ` × аппетит на высоте ${cd.appetite}` : ''}: <b>${n0(cd.target)} ккал</b> на группу. БЖУ на человека: Б ${n0(cd.mac.p)} · Ж ${n0(cd.mac.f)} · У ${n0(cd.mac.c)} г.</p></div></details>`;
+}
+
+const views = {
+  calc(_, ctx) {
+    const trip = getTrip(), { calc, menu, P } = ensure(), prods = products();
+    if (!calc.summary) return { html: `<h2>Расчёт</h2>${calc.warnings.map(w => `<p class="warnmsg">${esc(w)}</p>`).join('')}<p class="empty">Заполните вкладку «Поход» (участники с возрастом, ростом и весом, дни) и «Продукты».</p>` };
+    const S = calc.summary, enough = prods.filter(p => p.on).length > 10;
+    const totG = menu.days.reduce((s, d) => s + menuGrams(d), 0), totK = menu.days.reduce((s, d) => s + menuKcal(d, prods), 0);
+    const cov = S.need ? totK / S.need : 0, gpd = totG / S.n / S.days, covPct = Math.round(cov * 100);
+    const warns = [...calc.warnings, ...menuWarnings(trip, menu, prods, P)];
+    if (!enough) warns.push('Включено мало продуктов — меню может получиться неполным.');
+    if (covPct < P.cov_warn) warns.push(`Общее покрытие ${covPct}% ниже порога ${P.cov_warn}%`);
+    const slider = Math.round(trip.prefs.mode === 'custom' ? (trip.prefs.custom ?? P.cov_custom) : { hungry: P.cov_hungry, std: P.cov_std, full: P.cov_full }[trip.prefs.mode]);
+    const cards = calc.days.map((cd, i) => {
+      const day = menu.days[i], k = menuKcal(day, prods), c = cd.need ? Math.round(k / cd.need * 100) : 0, d = cd.d;
+      return `<section class="dcard"><div class="dh"><b>День ${i + 1} · ${esc(d.type)}</b><span class="muted">${d.km ? d.km + ' км · ' : ''}${d.maxAlt ? Math.round(d.maxAlt) + ' м' : ''}${d.tday != null ? ` · ${Math.round(d.tday)}°/${d.tnight != null ? Math.round(d.tnight) : '—'}°` : ''}</span></div>
+        <div class="nums"><div><span class="big">${n0(cd.need)}</span><span class="muted small">потребность, ккал</span></div><div><span class="big">${n0(k)}</span><span class="muted small">даёт раскладка, ккал</span></div><div><span class="big ${c < P.cov_warn ? 'bad' : 'good'}">${c}%</span><span class="muted small">покрытие</span></div><div><span class="big">${n0(menuGrams(day))}</span><span class="muted small">граммов на группу</span></div></div>
+        <p class="muted small">На человека: ${cd.per.map(x => `${esc(x.p.name || '—')} ${n0(x.total)}`).join(' · ')} ккал</p>${why(cd, P)}
+        <div class="meals">${M4.map(m => { const e = day[m]; const dish = e?.dish && findDish(trip, e.dish); return `<button class="meal" data-go="meal" data-arg="${i}:${m}"><span class="mh">${MEALS[m]}${e?.pin ? ' · закреплено' : ''}</span><span class="mn">${esc(dish ? dish.name : (e?.empty ? 'Убрано' : 'Нет подходящего'))}</span><span class="mi muted small">${(e?.items || []).map(it => `${esc(byId(it.pid)?.name || '?')} ${it.g} г`).join(', ')}</span></button>`; }).join('')}</div></section>`;
+    }).join('');
+    return {
+      html: `<h2>Расчёт</h2>
+        <div class="metrics"><div><span class="big">${S.days}</span><span class="muted small">дней</span></div><div><span class="big">${kg(totG)} кг</span><span class="muted small">вся раскладка</span></div><div><span class="big">${n0(gpd)} г</span><span class="muted small">на чел. в день</span></div><div><span class="big">${n0(totK / S.n / S.days)}</span><span class="muted small">ккал на чел.</span></div><div><span class="big ${covPct < P.cov_warn ? 'bad' : 'good'}">${covPct}%</span><span class="muted small">покрытие</span></div><div><span class="big">${kg(S.fuel)} кг</span><span class="muted small">газ</span></div></div>
+        <p class="muted small">Ориентиры на человека в день: ${P.ref_hungry} г — голодно, ${P.ref_std} г — стандарт, ${P.ref_full} г — сытно. Оценки приблизительные и настраиваются.</p>
+        <div class="fld"><label>Сытость: <b id="sv">${slider}%</b> от потребности</label><div class="ctl"><input type="range" id="slide" min="40" max="100" value="${slider}" style="width:150px"></div></div>
+        <button class="btn" id="rebuild">Пересобрать меню</button><p class="muted small">Закреплённые блюда не меняются.</p>
+        ${warns.length ? `<h3>Предупреждения</h3><ul class="warnlist">${warns.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
+        ${cards}`,
+      bind(root) {
+        const sl = root.querySelector('#slide');
+        sl.oninput = () => { root.querySelector('#sv').textContent = sl.value + '%'; };
+        sl.onchange = () => { trip.prefs.mode = 'custom'; trip.prefs.custom = +sl.value; saveTrip(); ctx.rerender(); };
+        root.querySelector('#rebuild').onclick = () => { ensure(true); ctx.rerender(); };
+      },
+    };
+  },
+
+  meal(arg, ctx) {
+    const [i, m] = arg.split(':'), trip = getTrip(), { calc, menu, P } = ensure(), e = menu.days[i][m], prods = products();
+    const dish = e.dish && findDish(trip, e.dish), opts = possibleFor(trip, prods, +i, m).filter(d => d.id !== e.dish);
+    return {
+      html: `<button class="back" data-go="calc">‹ Расчёт</button><h2>День ${+i + 1} · ${MEALS[m]}</h2><h3>${esc(dish?.name || (e.empty ? 'Блюдо убрано' : 'Нет подходящего блюда'))}</h3>
+        <ul class="list">${(e.items || []).map(it => `<li><span>${esc(byId(it.pid)?.name || '?')}</span><b>${it.g} г</b></li>`).join('')}</ul>
+        <p class="muted small">Граммы указаны на всю группу. ≈ ${Math.round(itemsKcal(e.items || [], prods))} ккал.</p>
+        <div class="two">${dish ? `<button class="btn" id="pin">${e.pin ? 'Открепить' : 'Закрепить'}</button><button class="btn ghost" id="again">Другие продукты</button>` : ''}<button class="btn danger" id="del">Убрать</button></div>
+        <h3>Заменить на</h3><ul class="list">${opts.map(d => `<li><button data-rep="${d.id}">${esc(d.name)}<span>›</span></button></li>`).join('') || '<li class="muted">Других подходящих блюд нет</li>'}</ul>`,
+      bind(root) {
+        const set = v => { menu.days[i][m] = v; saveTrip(); ctx.go('meal', arg); };
+        root.querySelector('#pin')?.addEventListener('click', () => set({ ...e, pin: !e.pin }));
+        root.querySelector('#again')?.addEventListener('click', () => set(mealFor(trip, calc, prods, P, +i, m, e.dish, Math.floor(Math.random() * 50) + 1)));
+        root.querySelector('#del').onclick = () => { menu.days[i][m] = { empty: true, items: [], pin: false }; saveTrip(); ctx.go('calc'); };
+        root.querySelectorAll('[data-rep]').forEach(b => b.onclick = () => set(mealFor(trip, calc, prods, P, +i, m, b.dataset.rep)));
+      },
+    };
+  },
+};
+
+return {sig, ensure, menuKcal, menuGrams, views};
+})();
+__m['shop.js'] = (() => {
+// Вкладка «Покупки»: список, фасовка, рюкзаки, топливо и вода, экспорт.
+const {allParams, opts, saveOpts} = __m['params.js'];
+const {SHOP_DEPT} = __m['products.js'];
+const {MEALS, findDish, allowed} = __m['menu.js'];
+const {products, byId} = __m['pstore.js'];
+const {getTrip, saveTrip, setTrip, newTrip} = __m['trip.js'];
+const {ensure, menuGrams} = __m['calcview.js'];
+const {esc} = __m['ui.js'];
+
+const M4 = ['b', 'l', 'd', 's'], n0 = x => Math.round(x).toLocaleString('ru'), kg = g => (g / 1000).toFixed(1).replace('.', ',');
+const DEPT_ORDER = ['Овощи', 'Хлеб', 'Мясо', 'Молочный отдел', 'Бакалея', 'Специи', 'Сладкое', 'Сухофрукты и орехи', 'Напитки', 'Прочее'];
+
+// Аварийный запас: калорийные продукты на reserve_days дней
+function reserveItems(trip, calc, P) {
+  const parts = [['Грецкий|Арахис|Миндаль', .3], ['Шоколад', .25], ['Халва|Козинаки', .25], ['Масло топлёное|Сало', .2]], out = [];
+  const kcal = calc.summary.reserveKcal;
+  parts.forEach(([kw, f]) => {
+    const p = products().find(x => x.on && kw.split('|').some(k => x.name.includes(k)) && allowed(x, trip.group));
+    if (p && p.kcal > 0) out.push({ pid: p.id, g: Math.round(kcal * f / p.kcal * 100 / 10) * 10 });
+  });
+  return out;
+}
+
+function shopData() {
+  const trip = getTrip(), { calc, menu, P } = ensure();
+  if (!menu) return null;
+  const n = calc.summary.n, need = {}, add = (pid, g, tag) => { need[pid] ??= { g: 0, reserve: 0 }; need[pid][tag || 'g'] += g; };
+  menu.days.forEach(d => M4.forEach(m => (d[m]?.items || []).forEach(it => add(it.pid, it.g))));
+  const extra = (name, g) => { const p = products().find(x => x.on && x.name === name); if (p && g > 0) add(p.id, g); };
+  extra('Чай чёрный', P.tea_g * n * menu.days.length);
+  if (trip.prefs.sugar === 'common') extra('Сахар', P.sugar_g * n * menu.days.length);
+  extra('Соль', P.salt_fix + P.salt_pp * n * menu.days.length);
+  const reserve = reserveItems(trip, calc, P);
+  reserve.forEach(it => add(it.pid, it.g, 'reserve'));
+  const rows = Object.entries(need).map(([pid, v]) => {
+    const p = byId(pid); if (!p) return null;
+    const total = v.g + v.reserve, packs = p.pack ? Math.ceil(total / p.pack - 1e-9) : null;
+    return { p, g: v.g, reserve: v.reserve, total, packs, buy: opts.round && packs ? packs * p.pack : total, price: p.price && packs ? packs * p.price : (p.price ? p.price * total / (p.pack || 100) : 0), dept: SHOP_DEPT[p.cat] || 'Прочее' };
+  }).filter(Boolean);
+  return { trip, calc, menu, P, rows, n, reserve };
+}
+
+const bought = t => (t.bought ||= {});
+const fuelDays = (calc, P) => calc.days.map(d => d.fuel);
+
+function weights(D) {
+  const { trip, calc, menu } = D, g = calc.days[0].per.map(x => x.p), shareSum = g.reduce((s, p) => s + (p.share || 1), 0);
+  const dayFood = menu.days.map((d, i) => menuGrams(d) + calc.days[i].fuel + 0);
+  const menuG = menu.days.reduce((t, d) => t + menuGrams(d), 0), resTotal = D.rows.reduce((t, r) => t + r.reserve, 0);
+  const extras = Math.max(0, D.rows.reduce((t, r) => t + r.total - r.reserve, 0) - menuG);
+  const drops = (trip.drops || []).map(d => +d.after).filter(Boolean).sort((a, b) => a - b);
+  const common = trip.gear.common || 0;
+  return g.map(p => {
+    const sh = (p.share || 1) / shareSum, byDay = dayFood.map((_, d) => {
+      const end = drops.find(a => a >= d + 1 && a < dayFood.length) ?? dayFood.length;
+      const seg = dayFood.slice(d, end).reduce((a, b) => a + b, 0) + resTotal;
+      return ((p.gear || 0) + common * sh) + (seg + extras) * sh / 1000;
+    });
+    return { p, sh, byDay };
+  });
+}
+
+function textExport(D) {
+  const { trip, rows, calc } = D, t = [`Раскладка: ${trip.name || 'поход'}`, `${calc.summary.days} дн., ${calc.summary.n} чел.`, '', 'СПИСОК ПОКУПОК'];
+  DEPT_ORDER.forEach(dep => { const r = rows.filter(x => x.dept === dep); if (r.length) { t.push(dep + ':'); r.forEach(x => t.push(`  ${x.p.name} — ${x.packs && opts.round ? `${x.packs} уп. (${n0(x.buy)} г)` : n0(x.total) + ' г'}`)); } });
+  t.push('', 'ПО ДНЯМ');
+  D.menu.days.forEach((d, i) => { t.push(`День ${i + 1}`); M4.forEach(m => { const e = d[m]; if (e?.items?.length) t.push(`  ${MEALS[m]}: ${findDish(trip, e.dish)?.name || ''} — ${e.items.map(it => `${byId(it.pid)?.name} ${it.g} г`).join(', ')}`); }); });
+  return t.join('\n');
+}
+const csvExport = D => '﻿Товар;Нужно, г;Резерв, г;Упаковка, г;Упаковок;Купить, г;Отдел\n' + D.rows.map(r => [r.p.name, r.g, r.reserve, r.p.pack || '', r.packs ?? '', r.buy, r.dept].join(';')).join('\n');
+function download(name, text, mime) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: mime })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
+
+const views = {
+  shop(_, ctx) {
+    const D = shopData();
+    if (!D) return { html: '<h2>Покупки</h2><p class="empty">Список появится после расчёта: заполните поход и продукты.</p>' };
+    const tab = ctx.state.shopTab || 'list', { trip, calc, menu, P, rows, n } = D, b = bought(trip);
+    const tabs = [['list', 'Список'], ['pack', 'Фасовка'], ['bags', 'Рюкзаки'], ['fuel', 'Топливо'], ['exp', 'Экспорт']];
+    let body = '';
+    if (tab === 'list') {
+      const sum = rows.reduce((s, r) => s + r.price, 0);
+      body = `<div class="fld"><label>Крупный шрифт (для магазина)</label><div class="ctl"><input type="checkbox" id="big"${ctx.state.big ? ' checked' : ''}></div></div>
+        ${DEPT_ORDER.map(dep => { const r = rows.filter(x => x.dept === dep).sort((a, b) => a.p.name.localeCompare(b.p.name)); return r.length ? `<h3>${dep}</h3><ul class="list shop">${r.map(x => `<li class="${b[x.p.id] ? 'done' : ''}"><label><input type="checkbox" data-buy="${x.p.id}"${b[x.p.id] ? ' checked' : ''}><span><b>${esc(x.p.name)}</b><br><span class="muted small">нужно ${n0(x.total)} г${x.reserve ? ` (в т.ч. запас ${n0(x.reserve)})` : ''}${x.packs && opts.round ? ` → ${x.packs} × ${x.p.pack} г = ${n0(x.buy)} г` : ''}</span></span></label>${x.price ? `<span>${n0(x.price)} ${opts.currency}</span>` : ''}</li>`).join('')}</ul>` : ''; }).join('')}
+        ${sum ? `<p><b>Итого ${n0(sum)} ${opts.currency}</b> · с человека ${n0(sum / n)} ${opts.currency}</p>` : '<p class="muted small">Цены не заданы. Их можно указать в карточке продукта.</p>'}
+        <p class="muted small">Аварийный запас на ${P.reserve_days} дн. включён в список.</p>`;
+    } else if (tab === 'pack') {
+      body = menu.days.map((d, i) => `<h3>День ${i + 1}</h3>` + M4.map(m => { const e = d[m]; return e?.items?.length ? `<div class="pk"><b>${MEALS[m]}</b> · ${esc(findDish(trip, e.dish)?.name || '')}<br><span class="muted">${e.items.map(it => `${esc(byId(it.pid)?.name)} ${it.g} г`).join(', ')}</span></div>` : ''; }).join('')).join('') + '<button class="btn" id="print">Печать этикеток</button>';
+    } else if (tab === 'bags') {
+      const W = weights(D), lim = p => (p.sex === 'F' ? trip.gear.maxF : trip.gear.maxM);
+      body = `<p class="muted small">Вес рюкзака в начале каждого дня (личное снаряжение + доля общего + продукты и газ до ближайшей заброски). Продукты делятся по «Доле общего груза».</p>` + W.map(w => `<h3>${esc(w.p.name || 'Участник')} <span class="muted">· доля ${(w.sh * 100).toFixed(0)}%${lim(w.p) ? ` · лимит ${lim(w.p)} кг` : ''}</span></h3>
+        <div class="tbl"><table><tr>${w.byDay.map((_, i) => `<th>Д${i + 1}</th>`).join('')}</tr><tr>${w.byDay.map(x => `<td class="${lim(w.p) && x > lim(w.p) ? 'bad' : ''}">${x.toFixed(1)}</td>`).join('')}</tr></table></div>
+        <details><summary>Что нести</summary><ul class="list">${rows.slice().sort((a, b) => b.total - a.total).map(r => `<li><span>${esc(r.p.name)}</span><b>${n0(Math.round(r.buy * w.sh / 10) * 10)} г</b></li>`).join('')}</ul></details>`).join('');
+    } else if (tab === 'fuel') {
+      const fd = fuelDays(calc, P), tot = fd.reduce((a, b) => a + b, 0), water = calc.days.map(d => d.water);
+      body = `<div class="metrics"><div><span class="big">${n0(tot)} г</span><span class="muted small">газ на поход</span></div><div><span class="big">${Math.ceil(tot / P.canister_g)}</span><span class="muted small">баллонов по ${P.canister_g} г</span></div><div><span class="big">${(water.reduce((a, b) => a + b, 0) / water.length).toFixed(1).replace('.', ',')} л</span><span class="muted small">воды на группу в день</span></div></div>
+        <div class="tbl"><table><tr><th>День</th><th>Газ, г</th><th>Вода, л</th></tr>${fd.map((f, i) => `<tr><td>${i + 1}</td><td>${n0(f)}</td><td>${water[i].toFixed(1)}</td></tr>`).join('')}</table></div>
+        <p class="muted small">Газ — по нормам из Настроек (без снега, с топкой снега, мороз/высота). Вода: ${P.water_ml} мл на кг веса, в жару плюс ${P.hot_l} л.</p>`;
+    } else {
+      body = `<div class="two"><button class="btn" id="share">Поделиться текстом</button><button class="btn ghost" id="print">Печать / PDF</button></div>
+        <div class="two"><button class="btn ghost" id="csv">Скачать CSV</button><button class="btn ghost" id="json">Сохранить поход (JSON)</button></div>
+        <label class="btn ghost filebtn">Загрузить поход (JSON)<input type="file" id="load" accept=".json" hidden></label><p class="warnmsg" id="msg"></p>`;
+    }
+    return {
+      html: `<h2>Покупки</h2><div class="subtabs">${tabs.map(([k, n]) => `<button data-st="${k}" class="${tab === k ? 'on' : ''}">${n}</button>`).join('')}</div><div class="${ctx.state.big && tab === 'list' ? 'bigfont' : ''}">${body}</div>`,
+      bind(root) {
+        root.querySelectorAll('[data-st]').forEach(x => x.onclick = () => { ctx.state.shopTab = x.dataset.st; ctx.rerender(); });
+        root.querySelector('#big')?.addEventListener('change', e => { ctx.state.big = e.target.checked; ctx.rerender(); });
+        root.querySelectorAll('[data-buy]').forEach(c => c.onchange = () => { b[c.dataset.buy] = c.checked; saveTrip(); ctx.rerender(); });
+        root.querySelector('#print')?.addEventListener('click', () => window.print());
+        root.querySelector('#csv')?.addEventListener('click', () => download('raskladka.csv', csvExport(D), 'text/csv'));
+        root.querySelector('#json')?.addEventListener('click', () => download('pohod.json', JSON.stringify(trip), 'application/json'));
+        root.querySelector('#share')?.addEventListener('click', async () => {
+          const text = textExport(D), msg = root.querySelector('#msg');
+          try { if (navigator.share) await navigator.share({ title: trip.name || 'Раскладка', text }); else { await navigator.clipboard.writeText(text); msg.textContent = 'Скопировано, можно вставлять в мессенджер.'; } } catch (e) { if (e.name !== 'AbortError') { msg.textContent = 'Не удалось поделиться. Скачайте CSV.'; } }
+        });
+        root.querySelector('#load')?.addEventListener('change', async e => {
+          try { const j = JSON.parse(await e.target.files[0].text()); if (!j.days || !j.group) throw 0; setTrip({ ...newTrip(), ...j }); ctx.rerender(); } catch { root.querySelector('#msg').textContent = 'Файл не похож на сохранённый поход.'; }
+        });
+      },
+    };
+  },
+};
+
+return {shopData, views};
+})();
+__m['extras.js'] = (() => {
+// Экраны Настроек: мои поправки, шаблоны блюд, магазин, история, отзыв после похода, резервная копия, возможности.
+const {DAY_TYPES, APP_VERSION} = __m['defaults.js'];
+const {opts, saveOpts} = __m['params.js'];
+const {DISHES, MEALS, findDish} = __m['menu.js'];
+const {products, byId} = __m['pstore.js'];
+const {getTrip, saveTrip, setTrip, newTrip} = __m['trip.js'];
+const {ensure} = __m['calcview.js'];
+const {form, bindForm, esc} = __m['ui.js'];
+const store = __m['store.js'];
+
+const back = (to = 'settings', t = 'Настройки') => `<button class="back" data-go="${to}">‹ ${t}</button>`;
+const numRow = (label, attr, val, unit = '%') => `<div class="fld"><label>${esc(label)}</label><div class="ctl"><input type="number" step="any" ${attr} value="${val ?? ''}"><span class="muted unit">${unit}</span></div></div>`;
+const download = (name, text) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
+
+const views = {
+  adj(_, ctx) {
+    const t = getTrip(); t.adj ||= { dayType: {}, meal: {}, product: {} };
+    const a = t.adj, prods = products().filter(p => p.on);
+    return {
+      html: `${back()}<h2>Мои поправки</h2><p class="muted">Прибавка или убавка в процентах к рекомендации приложения. Общая поправка — в «Параметрах расчёта» (Сутки). Поправки по участникам — коэффициент аппетита в карточке участника.</p>
+        <h3>По типу дня</h3>${DAY_TYPES.map(d => numRow(d, `data-a="dayType:${d}"`, a.dayType[d])).join('')}
+        <h3>По приёму пищи</h3>${Object.entries(MEALS).map(([k, n]) => numRow(n, `data-a="meal:${k}"`, a.meal[k])).join('')}
+        <h3>На конкретный продукт</h3><p class="muted small">Например «гречка +10 г»: к каждому приёму, где она есть, добавится столько граммов на человека.</p>
+        ${Object.entries(a.product).map(([pid, g]) => numRow(byId(pid)?.name || '?', `data-a="product:${pid}"`, g, 'г/чел')).join('')}
+        <div class="two"><select id="np"><option value="">Выбрать продукт…</option>${prods.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select><button class="btn" id="addp" style="width:auto;margin:0">Добавить</button></div>`,
+      bind(root) {
+        root.querySelectorAll('[data-a]').forEach(i => i.onchange = () => { const [g, k] = i.dataset.a.split(':'); if (i.value === '') delete a[g][k]; else a[g][k] = +i.value; saveTrip(); });
+        root.querySelector('#addp').onclick = () => { const v = root.querySelector('#np').value; if (v) { a.product[v] = a.product[v] ?? 10; saveTrip(); ctx.rerender(); } };
+      },
+    };
+  },
+
+  dishes(_, ctx) {
+    const t = getTrip(); t.dishOff ||= []; t.customDishes ||= [];
+    const all = [...DISHES, ...t.customDishes];
+    return {
+      html: `${back()}<h2>Шаблоны блюд</h2><p class="muted">Выключенные блюда не попадут в меню.</p>
+        ${Object.entries(MEALS).map(([m, n]) => `<h3>${n}</h3><ul class="list">${all.filter(d => (m === 'l' ? 'ch'.includes(d.meal) : d.meal === m)).map(d => `<li><label class="sw"><input type="checkbox" data-d="${d.id}"${t.dishOff.includes(d.id) ? '' : ' checked'}></label><span style="flex:1">${esc(d.name)}${d.id[0] === 'u' ? ' ★' : ''}</span>${d.id[0] === 'u' ? `<button class="mini" data-rm="${d.id}">Удалить</button>` : ''}</li>`).join('')}</ul>`).join('')}
+        <h3>Своё блюдо</h3><div class="fld"><label>Название</label><div class="ctl"><input id="dn"></div></div>
+        <div class="fld"><label>Приём</label><div class="ctl"><select id="dm"><option value="b">Завтрак</option><option value="c">Обед холодный</option><option value="h">Обед горячий</option><option value="d">Ужин</option><option value="s">Перекусы</option></select></div></div>
+        <div class="fld"><label>Продукты через запятую</label><div class="ctl"><input id="dp" placeholder="Гречка, Тушёнка, Масло"></div></div>
+        <button class="btn" id="adddish">Добавить блюдо</button><p class="warnmsg" id="msg"></p>`,
+      bind(root) {
+        root.querySelectorAll('[data-d]').forEach(c => c.onchange = () => { const id = c.dataset.d; t.dishOff = t.dishOff.filter(x => x !== id); if (!c.checked) t.dishOff.push(id); saveTrip(); });
+        root.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { t.customDishes = t.customDishes.filter(d => d.id !== b.dataset.rm); saveTrip(); ctx.rerender(); });
+        root.querySelector('#adddish').onclick = () => {
+          const name = root.querySelector('#dn').value.trim(), kws = root.querySelector('#dp').value.split(',').map(s => s.trim()).filter(Boolean);
+          if (!name || !kws.length) { root.querySelector('#msg').textContent = 'Укажите название и хотя бы один продукт.'; return; }
+          t.customDishes.push({ id: 'u' + Date.now(), name, meal: root.querySelector('#dm').value, tags: '', slots: kws.map((k, i) => ({ role: k, kw: k, frac: 1 / kws.length, opt: 0, fixed: null })) });
+          saveTrip(); ctx.rerender();
+        };
+      },
+    };
+  },
+
+  shopset(_, ctx) {
+    const F = [{ k: 'round', label: 'Округлять до упаковок', type: 'check' }, { k: 'currency', label: 'Валюта' }];
+    return { html: `${back()}<h2>Магазин</h2>${form(F, opts)}<p class="muted small">Отделы магазина для списка покупок задаются категорией продукта.</p>`, bind: root => bindForm(root, F, opts, saveOpts, () => ctx.rerender()) };
+  },
+
+  history(_, ctx) {
+    return {
+      html: `${back()}<h2>История походов</h2><p class="muted">Сохранённые копии. Сейчас открыт: «${esc(getTrip().name || 'без названия')}».</p><button class="btn" id="save">Сохранить текущий поход в историю</button><ul class="list" id="hl"><li class="muted">Загрузка…</li></ul>`,
+      async bind(root) {
+        const render = async () => {
+          const list = (await store.entries('trips')).filter(([k]) => k !== 'current').sort((a, b) => b[1]._saved - a[1]._saved);
+          root.querySelector('#hl').innerHTML = list.map(([k, t]) => `<li><span style="flex:1">${esc(t.name || 'Без названия')}<br><span class="muted small">${new Date(t._saved).toLocaleDateString('ru')} · ${t.days.length} дн.</span></span><button class="mini" data-open="${k}">Открыть</button> <button class="mini" data-copy="${k}">Как шаблон</button> <button class="mini" data-del="${k}">×</button></li>`).join('') || '<li class="muted">Пока пусто</li>';
+          root.querySelectorAll('[data-open]').forEach(b => b.onclick = async () => { if (confirm('Открыть этот поход? Текущий заменится (сначала сохраните его в историю).')) { const { _saved, ...t } = await store.get('trips', b.dataset.open); setTrip({ ...newTrip(), ...t }); ctx.go(''); } });
+          root.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => { const { _saved, menu, bought, fb, ...t } = await store.get('trips', b.dataset.copy); setTrip({ ...newTrip(), ...t, name: (t.name || '') + ' (копия)', start: '', end: '' }); ctx.go(''); });
+          root.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { await store.del('trips', b.dataset.del); render(); });
+        };
+        root.querySelector('#save').onclick = async () => { await store.put('trips', 'h' + Date.now(), { ...JSON.parse(JSON.stringify(getTrip())), _saved: Date.now() }); render(); };
+        render();
+      },
+    };
+  },
+
+  feedback(_, ctx) {
+    const t = getTrip(); t.fb ||= { days: [], dishes: {} };
+    const { menu } = t.days.length && t.group.length ? ensure() : {}, ids = menu ? [...new Set(menu.days.flatMap(d => ['b', 'l', 'd', 's'].map(m => d[m]?.dish)).filter(Boolean))] : [];
+    const sc = { '-1': 'Голодно', 0: 'Нормально', 1: 'Много' };
+    return {
+      html: `${back()}<h2>Отзыв после похода</h2><p class="muted">Отметь, как было по дням и блюдам. Приложение предложит поправки, применятся только после подтверждения.</p>
+        ${t.days.map((d, i) => `<div class="fld"><label>День ${i + 1}</label><div class="ctl"><div class="seg">${Object.entries(sc).map(([v, n]) => `<button data-fd="${i}:${v}" class="${String(t.fb.days[i]) === v ? 'on' : ''}">${n}</button>`).join('')}</div></div></div>`).join('') || '<p class="empty">Дней нет.</p>'}
+        <h3>Блюда</h3>${ids.map(id => `<div class="fld"><label>${esc(findDish(t, id)?.name)}</label><div class="ctl"><div class="seg"><button data-fh="${id}:-1" class="${t.fb.dishes[id] === -1 ? 'on' : ''}">Нет</button><button data-fh="${id}:1" class="${t.fb.dishes[id] === 1 ? 'on' : ''}">Да</button></div></div></div>`).join('')}
+        <button class="btn" id="sug">Предложить поправки</button><div id="out"></div>`,
+      bind(root) {
+        root.querySelectorAll('[data-fd]').forEach(b => b.onclick = () => { const [i, v] = b.dataset.fd.split(':'); t.fb.days[+i] = +v; saveTrip(); ctx.rerender(); });
+        root.querySelectorAll('[data-fh]').forEach(b => b.onclick = () => { const [id, v] = b.dataset.fh.split(':'); t.fb.dishes[id] = t.fb.dishes[id] === +v ? 0 : +v; saveTrip(); ctx.rerender(); });
+        root.querySelector('#sug').onclick = () => {
+          const vals = t.fb.days.filter(v => v != null), avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0, out = root.querySelector('#out');
+          const delta = Math.round(-avg * 10) / 100, likes = Object.entries(t.fb.dishes).filter(([, v]) => v);
+          if (!delta && !likes.length) { out.innerHTML = '<p class="muted">Поправок не нужно.</p>'; return; }
+          out.innerHTML = `<h3>Предложение</h3>${delta ? `<p>В среднем было «${avg < 0 ? 'голодно' : 'много'}»: изменить коэффициент аппетита всех участников на ${delta > 0 ? '+' : ''}${Math.round(delta * 100)}%.</p>` : ''}${likes.length ? `<p>Рейтинг блюд: ${likes.length} шт. (понравившиеся будут чаще попадать в меню).</p>` : ''}<button class="btn" id="apply">Применить</button>`;
+          out.querySelector('#apply').onclick = () => {
+            if (delta) t.group.forEach(p => { p.appetite = Math.round((p.appetite || 1) * (1 + delta) * 100) / 100; });
+            opts.ratings ||= {}; likes.forEach(([id, v]) => { opts.ratings[id] = (opts.ratings[id] || 0) + v; }); saveOpts();
+            saveTrip(); out.innerHTML = '<p class="good">Применено.</p>';
+          };
+        };
+      },
+    };
+  },
+
+  backup(_, ctx) {
+    return {
+      html: `${back()}<h2>Резервная копия</h2><p class="muted">Все данные приложения (походы, продукты, настройки) одним файлом.</p>
+        <button class="btn" id="exp">Сохранить копию (JSON)</button><label class="btn ghost filebtn">Восстановить из файла<input type="file" id="imp" accept=".json" hidden></label><p class="warnmsg" id="msg"></p>`,
+      bind(root) {
+        root.querySelector('#exp').onclick = async () => {
+          const all = { app: 'raskladka', version: APP_VERSION, date: new Date().toISOString() };
+          for (const s of ['trips', 'products', 'settings']) all[s] = await store.entries(s);
+          download(`raskladka-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(all));
+        };
+        root.querySelector('#imp').onchange = async e => {
+          try {
+            const j = JSON.parse(await e.target.files[0].text()); if (j.app !== 'raskladka') throw 0;
+            if (!confirm('Все текущие данные будут заменены данными из файла. Продолжить?')) return;
+            for (const s of ['trips', 'products', 'settings']) { await store.clear(s); for (const [k, v] of j[s] || []) await store.put(s, k, v); }
+            location.reload();
+          } catch { root.querySelector('#msg').textContent = 'Файл не подходит: нужна копия, сохранённая этим приложением.'; }
+        };
+      },
+    };
+  },
+
+  features() {
+    const L = [
+      ['Поход', 'Название, даты, вид и категория. Участники группы с ростом, весом, аппетитом и ограничениями. Дни: вручную или из GPX-трека (длина, набор, сброс, профиль, разбивка на дни, перетаскивание ночёвок). Температуру и осадки вводите сами. Заброски, снаряжение, предпочтения.'],
+      ['Продукты', 'Встроенная база с КБЖУ, переключатели «используем», поиск, свои продукты через Open Food Facts, штрихкод и ручной ввод.'],
+      ['Расчёт', 'Потребность каждого участника по дням: обмен, ходьба по Пандольфу, холод, высота, личные коэффициенты. Кнопка «Почему столько?» показывает расчёт по шагам. Меню по дням и приёмам, замена и закрепление блюд, ползунок сытости, предупреждения.'],
+      ['Покупки', 'Список с округлением до упаковок и отделами магазина, фасовка по дням, вес рюкзаков по дням, газ и вода, экспорт текстом, в CSV и JSON, печать.'],
+      ['Настройки', 'Тема, все параметры расчёта с возвратом к исходным, справка по методологии, мои поправки, шаблоны блюд, история походов, отзыв после похода, резервная копия.'],
+    ];
+    return { html: `${back()}<h2>Возможности приложения</h2>${L.map(([t, d]) => `<h3>${t}</h3><p>${esc(d)}</p>`).join('')}<p class="muted small">Версия ${APP_VERSION}.</p>` };
+  },
+};
+
+return {views};
+})();
+__m['app.js'] = (() => {
+const {APP_VERSION, TERMS_VERSION} = __m['defaults.js'];
+const store = __m['store.js'];
+const {loadParams} = __m['params.js'];
+const {loadTrip, views: tripViews} = __m['trip.js'];
+const {views: prodViews} = __m['productsview.js'];
+const {views: calcViews} = __m['calcview.js'];
+const {views: shopViews} = __m['shop.js'];
+const {views: extraViews} = __m['extras.js'];
+const {loadProducts} = __m['pstore.js'];
+const {views: settingsViews, DISCLAIMER} = __m['settings.js'];
+
+const app = document.getElementById('app');
+const state = { tab: 'trip', sub: 'gpx', view: null, arg: null, theme: 'auto', productsInSettings: false };
+
+const TABS = {
+  trip: { name: 'Поход' },
+  products: { name: 'Продукты', empty: 'База продуктов появится на этапе 4.' },
+  calc: { name: 'Расчёт', empty: 'Сначала заполните поход и продукты.' },
+  shop: { name: 'Покупки', empty: 'Список появится после расчёта.' },
+};
+
+function applyTheme() {
+  const dark = state.theme === 'dark' || (state.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  document.querySelector('meta[name=theme-color]').content = dark ? '#161A18' : '#2F4A3A';
+}
+
+function renderWelcome() {
+  app.innerHTML = `<div class="welcome">
+    <h1>Раскладка</h1><p class="muted">Расчёт питания для походов</p>
+    <h2>Прежде чем начать</h2><p>${DISCLAIMER}</p>
+    <label class="check"><input type="checkbox" id="ok"><span>Я прочитал(а) и согласен(на)</span></label>
+    <button class="btn" id="go" disabled>Начать работу</button>
+    <p class="muted">Условия v${TERMS_VERSION} · приложение ${APP_VERSION}</p></div>`;
+  const ok = document.getElementById('ok'), go = document.getElementById('go');
+  ok.onchange = () => go.disabled = !ok.checked;
+  go.onclick = async () => {
+    await store.put('settings', 'consent', { termsVersion: TERMS_VERSION, appVersion: APP_VERSION, date: new Date().toISOString() });
+    renderShell();
+  };
+}
+
+const ctx = {
+  state, applyTheme,
+  // go('') — к вкладке; go('day', 2) — открыть экран; replace — не добавлять шаг
+  go(view, arg = null) {
+    if (view === 'products') { state.tab = 'products'; view = ''; }
+    state.view = view || null; state.arg = arg; renderShell();
+  },
+  rerender() {
+    const m = app.querySelector('main'), y = m ? m.scrollTop : 0;
+    renderShell(); const n = app.querySelector('main'); if (n) n.scrollTop = y;
+  },
+};
+
+function currentView() {
+  if (state.view) return (tripViews[state.view] || prodViews[state.view] || calcViews[state.view] || shopViews[state.view] || extraViews[state.view] || settingsViews[state.view])(state.arg, ctx);
+  if (state.tab === 'trip') return tripViews.main(null, ctx);
+  if (state.tab === 'shop') return shopViews.shop(null, ctx);
+  if (state.tab === 'calc') return calcViews.calc(null, ctx);
+  if (state.tab === 'products') return prodViews.products(null, ctx);
+  return { html: `<h2>${TABS[state.tab].name}</h2><p class="empty">${TABS[state.tab].empty}</p>` };
+}
+
+function renderShell() {
+  const tabs = Object.entries(TABS).filter(([k]) => !(k === 'products' && state.productsInSettings));
+  const v = currentView();
+  app.innerHTML = `<header><h1>Раскладка</h1><button class="icon-btn" data-go="settings" aria-label="Настройки">⚙</button></header>
+    <main>${v.html}</main>
+    <nav class="tabs">${tabs.map(([k, t]) => `<button data-tab="${k}" class="${!state.view && state.tab === k ? 'on' : ''}">${t.name}</button>`).join('')}</nav>`;
+  app.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { state.tab = b.dataset.tab; state.view = null; renderShell(); });
+  app.querySelectorAll('[data-go]').forEach(b => b.onclick = () => ctx.go(b.dataset.go, b.dataset.arg === undefined ? null : (isNaN(b.dataset.arg) ? b.dataset.arg : Number(b.dataset.arg))));
+  v.bind?.(app.querySelector('main'));
+}
+
+(async () => {
+  state.theme = (await store.get('settings', 'theme')) || 'auto';
+  applyTheme();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  await loadParams(); await loadTrip(); await loadProducts();
+  state.productsInSettings = !!(await store.get('settings', 'productsDone'));
+  if (!(await store.get('settings', 'consent'))) renderWelcome(); else renderShell();
+})();
+
+return {};
+})();
+</script></body></html>

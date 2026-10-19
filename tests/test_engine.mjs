@@ -1,0 +1,18 @@
+import * as E from '../engine.js';
+import { PARAMS } from '../defaults.js';
+const P = Object.fromEntries(PARAMS.map(p => [p.id, p.def]));
+const ok = (n, c) => { console.log(c ? 'ok  ' : 'FAIL', n); if (!c) process.exitCode = 1; };
+const w = E.pandolf(75, 18, 0.83, 10, 1.2);
+ok('Пандольф ≈564 Вт: ' + w.toFixed(1), Math.abs(w - 564) < 6);
+ok('485 ккал/ч: ' + (w * 0.86).toFixed(0), Math.abs(w * 0.86 - 485) < 6);
+ok('BMR М 75/180/30', E.bmr({ sex: 'M', weight: 75, height: 180, age: 30 }) === 750 + 1125 - 150 + 5);
+ok('η снег 20 см', Math.abs(E.eta('snow', 20, P) - 2.94) < 1e-9);
+ok('спуск коэфф', E.descentK(5, P) === .85 && E.descentK(15, P) === 1 && E.descentK(30, P) === 1.15);
+const person = { sex: 'M', weight: 75, height: 180, age: 30, appetite: 1, gear: 9, share: 1, name: 'А' };
+const trip = { group: [person], days: [{ type: 'Ходовой', km: 15, up: 800, down: 300, hours: 7, cover: 'trail', maxAlt: 1500, tday: 15, tnight: 5 }, { type: 'Днёвка', maxAlt: 3200 }], gear: { common: 10 }, prefs: { mode: 'std' } };
+const r = E.computeTrip(trip, P);
+ok('день ходовой 2500–5000 ккал: ' + Math.round(r.days[0].need), r.days[0].need > 2500 && r.days[0].need < 5500);
+ok('днёвка = BMR·1.6', Math.abs(r.days[1].per[0].total - 1730 * 1.6 * (1 + 0.05 * 0.7)) < 1);
+ok('покрытие 67%', Math.abs(r.days[0].cover - 0.67) < 1e-9);
+ok('аппетит на высоте 3200: ' + r.days[1].appetite, r.days[1].appetite === 0.9);
+ok('+10% общая поправка', (() => { const Q = { ...P, general_pct: 10 }; return Math.abs(E.computeTrip(trip, Q).days[0].need / r.days[0].need - 1.1) < 1e-9; })());
