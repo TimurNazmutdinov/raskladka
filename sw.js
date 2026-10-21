@@ -1,14 +1,12 @@
-// Кэш-first для файлов приложения; при смене файлов увеличь версию кэша.
-const CACHE = 'raskladka-v8';
-const FILES = ['./', 'index.html', 'app.js', 'calcview.js', 'defaults.js', 'engine.js', 'extras.js', 'gpx.js', 'gpxview.js', 'menu.js', 'method.js', 'params.js', 'products.js', 'productsview.js', 'pstore.js', 'settings.js', 'shop.js', 'store.js', 'trip.js', 'ui.js', 'styles.css', 'manifest.json', 'icon.svg', 'icon-192.png', 'icon-512.png'];
-
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
-});
+// Service worker-«самоликвидатор»: v1 ставила кэш-first воркер, из-за него у установивших открывалась старая версия.
+// Этот файл заменяет его: чистит кэши, удаляет себя и перезагружает открытые вкладки.
+self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
-});
-self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => caches.delete(k)));
+    await self.registration.unregister();
+    const clients = await self.clients.matchAll({ type: 'window' });
+    clients.forEach(c => c.navigate(c.url));
+  })());
 });

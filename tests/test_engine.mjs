@@ -1,5 +1,5 @@
-import * as E from '../engine.js';
-import { PARAMS } from '../defaults.js';
+import * as E from '../src/engine.js';
+import { PARAMS } from '../src/defaults.js';
 const P = Object.fromEntries(PARAMS.map(p => [p.id, p.def]));
 const ok = (n, c) => { console.log(c ? 'ok  ' : 'FAIL', n); if (!c) process.exitCode = 1; };
 const w = E.pandolf(75, 18, 0.83, 10, 1.2);
