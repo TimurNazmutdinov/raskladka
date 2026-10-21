@@ -13,6 +13,8 @@ export function allowed(prod, group) {
 }
 export const itemsKcal = (items, prods) => items.reduce((s, it) => s + (it.skip ? 0 : (prods.find(p => p.id === it.pid)?.kcal || 0) * it.g / 100), 0);
 const norm = s => String(s).trim().toLowerCase();
+// Продукты по названию; p.aliases — названия из файла, которые пользователь связал с этим продуктом (имя в данных не меняется)
+export const nameMap = items => { const m = new Map(); for (const p of items) { m.set(norm(p.name), p); for (const a of p.aliases || []) if (!m.has(norm(a))) m.set(norm(a), p); } return m; };
 export const altNames = ing => String(ing.name).split('|').map(norm).filter(Boolean);
 
 function dayFlags(cd, i, P) {
@@ -84,7 +86,7 @@ function toEntry(dish, sc, n, ctx) {
 export function buildMenu(trip, calc, mset, pset, P, old = null, seed = 0) {
   const group = trip.group, n = calc.summary.n, prods = pset?.items || [], warnings = [], days = [];
   if (!mset || !prods.length) return { days: calc.days.map(() => ({})), warnings: ['Не выбран набор меню или набор продуктов.'], seed };
-  const byName = new Map(prods.map(p => [norm(p.name), p]));
+  const byName = nameMap(prods);
   const usage = {}, lastMeal = {};
   const cov = calc.days.length ? calc.days[0].cover : 0.67, covK = cov / 0.67;
   const hotLunchAlways = trip.food.lunchHot || String(trip.food.hot) === '3';
@@ -145,13 +147,13 @@ function buildSnack(rem, n, ctx, prods, mset, P, i) {
 
 // Повтор сборки одного приёма с выбранным блюдом (ручная замена)
 export function mealFor(trip, calc, mset, pset, P, i, m, dishId) {
-  const cd = calc.days[i], n = calc.summary.n, prods = pset.items, byName = new Map(prods.map(p => [norm(p.name), p]));
+  const cd = calc.days[i], n = calc.summary.n, prods = pset.items, byName = nameMap(prods);
   const ctx = { i, flags: dayFlags(cd, i, P), byName, group: trip.group, n }, d = mset.dishes.find(x => x.id === dishId);
   const split = { b: P.split_b, l: P.split_l, d: P.split_d }[m], sc = d && scale(d, ctx, cd.target / n * split / 100, i, 0);
   return sc ? { ...toEntry(d, sc, n, ctx), pin: true } : { empty: true, items: [] };
 }
 export function possibleFor(trip, calc, mset, pset, P, i, m) {
-  const n = calc.summary.n, cd = calc.days[i], byName = new Map(pset.items.map(p => [norm(p.name), p]));
+  const n = calc.summary.n, cd = calc.days[i], byName = nameMap(pset.items);
   const ctx = { i, flags: dayFlags(cd, i, P), byName, group: trip.group, n }, covK = calc.days[0].cover / 0.67;
   return mset.dishes.filter(d => d.meal === m && usable(d, m, ctx, cd.target / n * ({ b: P.split_b, l: P.split_l, d: P.split_d }[m]) / 100, P, covK));
 }
@@ -159,7 +161,7 @@ export const findDish = (mset, id) => mset?.dishes.find(d => d.id === id);
 
 // Проблемы набора меню относительно набора продуктов: [{dish, ing, alts:[{name,state}]}], state: ok | off | missing
 export function menuProblems(mset, pset) {
-  const byName = new Map((pset?.items || []).map(p => [norm(p.name), p])), out = [];
+  const byName = nameMap(pset?.items || []), out = [];
   (mset?.dishes || []).forEach(d => d.ing.forEach(ing => {
     const alts = altNames(ing).map(n => { const p = byName.get(n); return { name: n, id: p?.id, state: !p ? 'missing' : p.on ? 'ok' : 'off' }; });
     if (!alts.some(a => a.state === 'ok')) out.push({ dish: d, ing, alts });

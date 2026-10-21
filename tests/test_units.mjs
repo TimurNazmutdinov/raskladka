@@ -1,0 +1,17 @@
+import { scanUnits, applyUnits } from '../src/units.js';
+const ok = (n, c) => { console.log((c ? 'ok   ' : 'FAIL ') + n); if (!c) process.exitCode = 1; };
+const ing = (name, g, unit, extra = {}) => ({ name, g, unit, note: null, min: null, max: null, perGroup: false, srcCell: 'x', ...extra });
+const blocks = [{ kind: 'dishes', dishes: [{ name: 'Д', ing: [ing('Мука', 2, 'кг', { min: 1, max: 3 }), ing('Яйцо', 3, 'шт'), ing('Крупа', 600, 'г', { perGroup: true }), ing('Молоко', 200, 'мл'), ing('Соль', 5, 'г')] }] }];
+const s = scanUnits(blocks);
+ok('счётчики', s.kg === 1 && s.pcs === 1 && s.ml === 1 && s.group === 1 && s.pieceNames[0] === 'Яйцо');
+const same = applyUnits(blocks, {});
+ok('по умолчанию ничего не меняется', JSON.stringify(same) === JSON.stringify(blocks));
+const r = applyUnits(blocks, { kg: true, pcs: { Яйцо: 55 }, group: 12 })[0].dishes[0].ing;
+ok('кг → г, min/max', r[0].g === 2000 && r[0].unit === 'г' && r[0].min === 1000 && r[0].max === 3000);
+ok('шт × вес', r[1].g === 165 && r[1].unit === 'г');
+ok('на группу ÷ 12', r[2].g === 50 && !r[2].perGroup);
+ok('мл не трогаем', r[3].g === 200 && r[3].unit === 'мл');
+ok('граммы не трогаем', r[4] === blocks[0].dishes[0].ing[4]);
+ok('пометка', /пересчитано из 2 кг/.test(r[0].note) && /55 г/.test(r[1].conv));
+ok('исходные блоки не изменены', blocks[0].dishes[0].ing[0].g === 2 && blocks[0].dishes[0].ing[0].note === null);
+ok('шт без веса не меняется', applyUnits(blocks, { pcs: {} })[0].dishes[0].ing[1].unit === 'шт');

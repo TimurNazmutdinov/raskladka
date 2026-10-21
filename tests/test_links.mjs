@@ -1,0 +1,22 @@
+import { danglingProducts, danglingDishes, foundInFile, addAliases } from '../src/links.js';
+import { nameMap } from '../src/menu.js';
+import { planMenu } from '../src/plan.js';
+const ok = (n, c) => { console.log((c ? 'ok   ' : 'FAIL ') + n); if (!c) process.exitCode = 1; };
+const ing = (name, g = 100) => ({ name, g, unit: null, perGroup: false });
+const prods = [{ id: 'p1', name: 'Паста томатная', kcal: 100, p: 1, f: 1, c: 1, on: true }, { id: 'p2', name: 'Рис', kcal: 300, on: true }];
+const dishBlocks = [{ dishes: [{ name: 'Д', ing: [ing('Томат паста'), ing('рис '), ing('Лук|Рис'), ing('Сыр')] }] }];
+const dang = danglingProducts(dishBlocks, prods);
+ok('недостающие продукты (регистр, пробелы, варианты через |)', dang.join() === 'Томат паста,Сыр');
+ok('найдено в файле', foundInFile(dang, [{ name: ' сыр ' }, { name: 'Мясо' }]).length === 1);
+const n = addAliases(prods, { 'Томат паста': 'Паста томатная', 'Сыр': '' });
+ok('связь добавляет alias, имя не меняется', n === 1 && prods[0].name === 'Паста томатная' && prods[0].aliases[0] === 'Томат паста');
+ok('после связи недостающих меньше', danglingProducts(dishBlocks, prods).join() === 'Сыр');
+ok('nameMap видит alias', nameMap(prods).get('томат паста') === prods[0]);
+// блюда в плане
+const dishes = [{ id: 'd1', name: 'Борщ', ing: [ing('Рис')] }];
+const planBlocks = [{ rows: [{ day: 1, mealKey: 'l', dish: 'Борщ красный', portions: 2 }, { day: 1, mealKey: 'd', dish: 'Борщ', portions: 2 }] }];
+ok('блюда плана без пары', danglingDishes(planBlocks, dishes).join() === 'Борщ красный');
+addAliases(dishes, { 'Борщ красный': 'Борщ' });
+ok('после связи блюд пусто', danglingDishes(planBlocks, dishes).length === 0);
+const m = planMenu({}, { summary: { n: 2 }, days: [{}] }, { rows: planBlocks[0].rows }, { dishes }, { items: prods });
+ok('plan.js применяет alias блюда', m.warnings.length === 0 && m.days[0].l.parts[0].dish === 'd1');

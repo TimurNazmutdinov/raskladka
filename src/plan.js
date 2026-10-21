@@ -5,7 +5,8 @@ const DASH = ' + ';
 // Строит меню из плана. Количества — как в файле: на порцию × порции (из плана, иначе число участников).
 export function planMenu(trip, calc, plan, dset, pset) {
   const n = calc.summary.n, warnings = [], days = calc.days.map(() => ({}));
-  const dishBy = new Map((dset?.dishes || []).map(d => [d.name, d])), prodBy = new Map((pset?.items || []).map(p => [p.name, p]));
+  const withAl = (list, key) => { const m = new Map(list.map(x => [x[key], x])); for (const x of list) for (const a of x.aliases || []) if (!m.has(a)) m.set(a, x); return m; };
+  const dishBy = withAl(dset?.dishes || [], 'name'), prodBy = withAl(pset?.items || [], 'name');
   for (const row of plan.rows) {
     const i = row.day - 1;
     if (i < 0 || i >= days.length) { warnings.push(`План: день ${row.day} (${row.dish.trim()}) вне дней похода — не применён`); continue; }
