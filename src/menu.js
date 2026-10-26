@@ -3,6 +3,7 @@
 import { mealsOf, slotLabel, slotById } from './meals.js';
 export const MEALS = { b: 'Завтрак', l: 'Обед', d: 'Ужин', s: 'Перекус' };
 const ONION = /(^|[\s(])(лук|чеснок)/i; // лук и чеснок отдельными продуктами не предлагаем
+export const isWater = name => /^\s*вода(\s|$)/i.test(String(name)); // «вода техническая / питьевая» в блюде: воду считаем отдельно (параметры воды), а не как покупной продукт
 
 const has = (txt, w) => w && txt.toLowerCase().includes(w.toLowerCase());
 // Подходит ли продукт всем участникам (вегетарианство, аллергии, «не ест»)
@@ -42,8 +43,8 @@ const lim = (ing, k, def) => (ing[k] != null && ing[k] !== '' ? +ing[k] : def);
 // Масштабирование блюда под бюджет (ккал на человека). Возвращает {items(на 1 чел), kcal, grams} или null.
 // lunchP — параметры, если нужно соблюсти группы холодного обеда (порция растёт, пока правило не выполнится).
 function scale(dish, ctx, perPerson, salt, minKcal, lunchP = null) {
-  const base = dish.ing.map((ing, k) => ({ ing, p: pick(ing, ctx, salt + k) }));
-  if (base.some(b => !b.p)) return null;
+  const base = dish.ing.map((ing, k) => ({ ing, p: pick(ing, ctx, salt + k) })).filter(b => b.p || !isWater(b.ing.name)); // воды нет в наборе продуктов — не причина отбросить блюдо
+  if (!base.length || base.some(b => !b.p)) return null;
   const nong = b => b.ing.unit && b.ing.unit !== 'г';
   const ratio = (b, f) => { if (nong(b)) return 1; const g = b.ing.g; return Math.max(lim(b.ing, 'min', g * .7) / g, Math.min(lim(b.ing, 'max', g * 1.5) / g, f)); };
   const kc = f => base.reduce((s, b) => s + (nong(b) ? 0 : b.ing.g * ratio(b, f) * (b.p.kcal || 0) / 100), 0);
@@ -128,7 +129,10 @@ export function buildMenu(trip, calc, mset, pset, P, old = null, seed = 0) {
   // проверки минимумов по каждому дню
   days.forEach((d, i) => slots.forEach(slot => { const e = d[slot.id]; if (!e || e.empty) return; const per = itemsKcal(e.items, prods) / n, mn = minFor(slot.type, P, covK); if (per < mn * 0.97) warnings.push(`День ${i + 1}, ${slotLabel(slots, slot.id).toLowerCase()}: ${Math.round(per)} ккал на человека, меньше минимума ${Math.round(mn)}`); }));
   // при заданных минимумах приёмов день может выйти за цель — говорим об этом, а не молча урезаем
-  calc.days.forEach((cd, i) => { const per = slots.reduce((s, sl) => s + itemsKcal(days[i][sl.id]?.items || [], prods), 0) / n, tg = cd.target / n; if (tg > 0 && per > tg * 1.05) warnings.push(`День ${i + 1}: меню даёт ${Math.round(per)} ккал на человека при цели ${Math.round(tg)} (больше на ${Math.round((per / tg - 1) * 100)}%): сработали минимумы приёмов`); });
+  calc.days.forEach((cd, i) => { const per = slots.reduce((s, sl) => s + itemsKcal(days[i][sl.id]?.items || [], prods), 0) / n, tg = cd.target / n; if (tg > 0 && per > tg * 1.05) warnings.push(`День ${i + 1}: меню даёт ${Math.round(per)} ккал на человека при цели ${Math.round(tg)} (больше на ${Math.round((per / tg - 1) * 100)}%): сработали минимумы приёмов`); else if (tg > 0 && per < tg * 0.9) warnings.push(`День ${i + 1}: меню даёт только ${Math.round(per)} ккал на человека при цели ${Math.round(tg)} (недобор ${Math.round((1 - per / tg) * 100)}%)`); });
+  // блюдо, у которого нет хотя бы одного продукта, не готовится целиком — объясняем, какие продукты не найдены, иначе меню молча получается почти пустым
+  const noDish = days.some(d => slots.some(sl => d[sl.id]?.none));
+  if (noDish) { const miss = [...new Set(menuProblems(mset, pset).flatMap(p => p.alts.filter(a => a.state === 'missing').map(a => a.name)))]; if (miss.length) warnings.unshift(`Часть блюд нельзя приготовить: в наборе продуктов нет ${miss.length} продуктов из блюд (${miss.slice(0, 8).join(', ')}${miss.length > 8 ? '…' : ''}). Добавьте их в набор продуктов или свяжите названия при загрузке («Связи»), иначе меню собрано не полностью.`); }
   return { days, warnings, seed };
 }
 const menuRecent = (days, i, m, id, k) => days.slice(Math.max(0, i - k + 1)).some(d => d[m]?.dish === id);
@@ -171,7 +175,7 @@ export function menuProblems(mset, pset) {
   const byName = nameMap(pset?.items || []), out = [];
   (mset?.dishes || []).forEach(d => d.ing.forEach(ing => {
     const alts = altNames(ing).map(n => { const p = byName.get(n); return { name: n, id: p?.id, state: !p ? 'missing' : p.on ? 'ok' : 'off' }; });
-    if (!alts.some(a => a.state === 'ok')) out.push({ dish: d, ing, alts });
+    if (!alts.some(a => a.state === 'ok') && !(isWater(ing.name) && alts.every(a => a.state === 'missing'))) out.push({ dish: d, ing, alts });
   }));
   return out;
 }
