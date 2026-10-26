@@ -66,7 +66,7 @@ const lunchOk = (items, P) => { const g = lunchGroups(items); return g.carb >= P
 const carbShare = items => { let c = 0, t = 0; items.forEach(i => { t += i.g; if (['sweet', 'bread', 'grain', 'nuts'].includes(i.cat)) c += i.g; }); return t ? c / t : 0; };
 const round5 = g => Math.max(1, g < 20 ? Math.round(g) : Math.round(g / 5) * 5);
 
-// Минимум приёма (ккал на человека) = min_share_pct % от калорий этого приёма по распределению (доля × цель дня). Абсолютные min_b/min_l/min_d — необязательный пол (по умолчанию 0). Перекусы без минимума.
+// Минимум приёма (ккал на человека) = min_share_pct % (по умолчанию 95) от калорий этого приёма по распределению (доля × цель дня). Абсолютные min_b/min_l/min_d — необязательный пол (по умолчанию 0). Перекусы без минимума.
 function minFor(m, P, budget) {
   if (m === 's') return 0;
   return Math.max({ b: P.min_b, l: P.min_l, d: P.min_d }[m] || 0, budget * P.min_share_pct / 100);
@@ -103,6 +103,28 @@ function composedEntry(cm, n, ctx) {
 function toEntry(dish, sc, n, ctx) {
   const items = sc.items.map(it => it.water ? { pid: null, name: it.name, g: Math.max(10, Math.round(it.g * n / 10) * 10), unit: it.unit, water: true, skip: null } : { pid: it.pid, g: it.skip ? Math.round(it.g * n * 100) / 100 : round5(it.g * n), unit: it.unit, skip: it.skip });
   return { dish: dish.id, name: dish.name, items, cook: dish.cook || 0, perKcal: Math.round(sc.kcal), perGrams: Math.round(sc.grams), pin: false };
+}
+
+// Проверка готового меню (общая для генератора и для меню-планов): приём ниже минимума, блюдо без посчитанных продуктов,
+// день с перебором или недобором цели, строки не в граммах (шт, кг, мл), которые не входят ни в калории, ни в закупку.
+export function checkMenu(trip, calc, pset, P, days) {
+  const slots = mealsOf(trip, P), prods = pset.items, n = calc.summary.n, out = [];
+  const personalSn = trip.prefs?.snacks === 'personal', snSum = slots.filter(sl => sl.type === 's').reduce((a, sl) => a + (+sl.share || 0), 0), mainK = personalSn && snSum < 100 ? 100 / (100 - snSum) : 1;
+  days.forEach((d, i) => slots.forEach(slot => {
+    const e = d[slot.id]; if (!e || e.empty || e.personal || e.none) return;
+    const label = slotLabel(slots, slot.id).toLowerCase(), per = itemsKcal(e.items || [], prods) / n;
+    if (e.name && !(e.parts || []).some(p => p.missing) && !(e.items || []).some(it => it.pid && !it.skip && !it.water)) { out.push(`День ${i + 1}, ${label}: «${e.name}» без посчитанных продуктов — 0 ккал`); return; }
+    const bud = Math.min(calc.days[i].target / n, P.kcal_cap) * (+slot.share || 0) / 100 * (slot.type === 's' ? 1 : mainK), mn = minFor(slot.type, P, bud);
+    if (per < mn * 0.97) out.push(`День ${i + 1}, ${label}${e.name ? ` «${e.name}»` : ''}: ${Math.round(per)} ккал на человека, меньше минимума ${Math.round(mn)}`);
+  }));
+  calc.days.forEach((cd, i) => {
+    const per = slots.reduce((s, sl) => s + itemsKcal(days[i]?.[sl.id]?.items || [], prods), 0) / n, tg = cd.target / n;
+    if (tg > 0 && per > tg * 1.05) out.push(`День ${i + 1}: меню даёт ${Math.round(per)} ккал на человека при цели ${Math.round(tg)} (больше на ${Math.round((per / tg - 1) * 100)}%): сработали минимумы приёмов`);
+    else if (tg > 0 && per < tg * 0.9) out.push(`День ${i + 1}: меню даёт только ${Math.round(per)} ккал на человека при цели ${Math.round(tg)} (недобор ${Math.round((1 - per / tg) * 100)}%)`);
+  });
+  const unc = days.reduce((s, d) => s + Object.values(d).reduce((a, e) => a + (e?.items || []).filter(it => it.skip).length, 0), 0);
+  if (unc && !trip.planId) out.push(`В меню ${unc} строк не посчитано: единицы не граммы (шт, кг, мл…) или нет продукта в наборе. Они не входят ни в калории, ни в закупку; при загрузке выберите пересчёт единиц.`);
+  return out;
 }
 
 // Полная сборка меню. old — прежнее меню (закреплённые блюда сохраняются)
@@ -154,10 +176,7 @@ export function buildMenu(trip, calc, mset, pset, P, old = null, seed = 0) {
     });
     days.push(day);
   });
-  // проверки минимумов по каждому дню
-  days.forEach((d, i) => slots.forEach(slot => { const e = d[slot.id]; if (!e || e.empty) return; const bud = Math.min(calc.days[i].target / n, P.kcal_cap) * (+slot.share || 0) / 100 * (slot.type === 's' ? 1 : mainK), per = itemsKcal(e.items, prods) / n, mn = minFor(slot.type, P, bud); if (per < mn * 0.97) warnings.push(`День ${i + 1}, ${slotLabel(slots, slot.id).toLowerCase()}: ${Math.round(per)} ккал на человека, меньше минимума ${Math.round(mn)}`); }));
-  // при заданных минимумах приёмов день может выйти за цель — говорим об этом, а не молча урезаем
-  calc.days.forEach((cd, i) => { const per = slots.reduce((s, sl) => s + itemsKcal(days[i][sl.id]?.items || [], prods), 0) / n, tg = cd.target / n; if (tg > 0 && per > tg * 1.05) warnings.push(`День ${i + 1}: меню даёт ${Math.round(per)} ккал на человека при цели ${Math.round(tg)} (больше на ${Math.round((per / tg - 1) * 100)}%): сработали минимумы приёмов`); else if (tg > 0 && per < tg * 0.9) warnings.push(`День ${i + 1}: меню даёт только ${Math.round(per)} ккал на человека при цели ${Math.round(tg)} (недобор ${Math.round((1 - per / tg) * 100)}%)`); });
+  warnings.push(...checkMenu(trip, calc, pset, P, days)); // минимумы приёмов, перебор и недобор по дням, пустые блюда, строки не в граммах
   // блюдо, у которого нет хотя бы одного продукта, не готовится целиком — объясняем, какие продукты не найдены, иначе меню молча получается почти пустым
   const noDish = days.some(d => slots.some(sl => d[sl.id]?.none));
   if (noDish) { const miss = [...new Set(menuProblems(mset, pset).flatMap(p => p.alts.filter(a => a.state === 'missing').map(a => a.name)))]; if (miss.length) warnings.unshift(`Часть блюд нельзя приготовить: в наборе продуктов нет ${miss.length} продуктов из блюд (${miss.slice(0, 8).join(', ')}${miss.length > 8 ? '…' : ''}). Добавьте их в набор продуктов или свяжите названия при загрузке («Связи»), иначе меню собрано не полностью.`); }

@@ -29,7 +29,12 @@ export function shopData() {
   const trip = getTrip(), { calc, menu, P, pset } = ensure();
   if (!menu) return null;
   const n = calc.summary.n, need = {}, add = (pid, g, tag) => { need[pid] ??= { g: 0, reserve: 0 }; need[pid][tag || 'g'] += g; };
-  menu.days.forEach(d => Object.values(d).forEach(e => (e?.items || []).forEach(it => { if (!it.water) add(it.pid, it.g); })));
+  const unc = new Map(); // строки не в граммах (шт, кг, мл…) или без продукта в наборе: граммами в закупку не добавляем, показываем отдельно
+  menu.days.forEach(d => Object.values(d).forEach(e => (e?.items || []).forEach(it => {
+    if (it.water) return;
+    if (it.skip) { const k = (it.pid ?? it.name) + '|' + (it.unit || ''), u = unc.get(k) || { pid: it.pid, name: it.name, unit: it.unit || '', qty: 0, reason: it.skip }; u.qty += it.g; unc.set(k, u); return; }
+    add(it.pid, it.g);
+  })));
   const extra = (name, g) => { const p = products().find(x => x.on && x.name === name); if (p && g > 0) add(p.id, g); };
   extra('Соль', P.salt_fix + P.salt_pp * n * menu.days.length);
   const reserve = reserveItems(trip, calc, P);
@@ -40,7 +45,8 @@ export function shopData() {
     const total = v.g + v.reserve + resG, packs = p.pack ? Math.ceil(total / p.pack - 1e-9) : null;
     return { p, g: v.g, reserve: v.reserve, resPct, resG, total, packs, buy: opts.round && packs ? packs * p.pack : total, price: p.price && packs ? packs * p.price : (p.price ? p.price * total / (p.pack || 100) : 0), dept: SHOP_DEPT[p.cat] || 'Прочее' };
   }).filter(Boolean);
-  return { trip, calc, menu, P, pset, rows, n, reserve };
+  const uncounted = [...unc.values()].map(u => ({ ...u, name: u.name || byId(u.pid)?.name || '?', qty: Math.round(u.qty * 100) / 100 }));
+  return { trip, calc, menu, P, pset, rows, n, reserve, uncounted };
 }
 
 const bought = t => (t.bought ||= {});
@@ -64,8 +70,9 @@ function weights(D) {
 }
 
 function textExport(D) {
-  const { trip, rows, calc } = D, t = [`Раскладка: ${trip.name || 'поход'}`, `${calc.summary.days} дн., ${calc.summary.n} чел.`, '', 'СПИСОК ПОКУПОК'];
+  const { trip, rows, calc } = D, t = [`Раскладка: ${trip.name || 'поход'}`, `${calc.summary.days} дн., ${calc.summary.n} чел.`, '', ...(D.menu.warnings?.length ? [`ВНИМАНИЕ: в меню предупреждений: ${D.menu.warnings.length}. Первые: ${D.menu.warnings.slice(0, 3).join(' | ')}`, ''] : []), 'СПИСОК ПОКУПОК'];
   DEPT_ORDER.forEach(dep => { const r = rows.filter(x => x.dept === dep); if (r.length) { t.push(dep + ':'); r.forEach(x => t.push(`  ${x.p.name} — ${x.packs && opts.round ? `${x.packs} уп. (${n0(x.buy)} г)` : n0(x.total) + ' г'}`)); } });
+  if (D.uncounted?.length) { t.push('', 'НЕ ПОСЧИТАНО В ГРАММАХ (купите отдельно):'); D.uncounted.forEach(u => t.push(`  ${u.name} — ${u.qty} ${u.unit || 'ед.'} (${u.reason})`)); }
   t.push('', 'ПО ДНЯМ');
   D.menu.days.forEach((d, i) => { t.push(`День ${i + 1}`); const sl = mealsOf(trip, D.P); sl.forEach(s => { const e = d[s.id]; if (e?.items?.length) t.push(`  ${slotLabel(sl, s.id)}: ${e.name || ''} — ${e.items.filter(it => !it.water).map(it => `${byId(it.pid)?.name} ${it.g} г`).join(', ')}${e.items.some(it => it.water) ? `; вода на готовку ≈ ${(e.items.filter(it => it.water).reduce((s, i) => s + i.g, 0) / 1000).toFixed(1)} л` : ''}`); }); });
   return t.join('\n');
@@ -78,6 +85,8 @@ export const views = {
     const D = shopData();
     if (!D) return { html: '<h2>Покупки</h2><p class="empty">Список появится после составления меню: нужен набор продуктов и набор меню.</p>' };
     const tab = ctx.state.shopTab || 'list', { trip, calc, menu, P, rows, n } = D, b = bought(trip);
+    const warns = menu.warnings || [], warnHtml = warns.length ? `<div class="warnbox"><b>В меню предупреждений: ${warns.length}.</b> Проверьте их до закупки (вкладка «Расчёт»).<details><summary>Показать</summary><ul class="warnlist">${warns.slice(0, 8).map(w => `<li>${esc(w)}</li>`).join('')}${warns.length > 8 ? `<li>…и ещё ${warns.length - 8}</li>` : ''}</ul></details></div>` : '';
+    const uncHtml = D.uncounted.length ? `<div class="warnbox"><b>Не посчитано в закупке (${D.uncounted.length}):</b> единицы не граммы или нет продукта в наборе. Купите по рецепту отдельно или пересчитайте единицы при загрузке.<ul class="warnlist">${D.uncounted.map(u => `<li>${esc(u.name)} — ${u.qty} ${esc(u.unit || 'ед.')} <span class="muted small">(${esc(u.reason)})</span></li>`).join('')}</ul></div>` : '';
     const tabs = [['list', 'Список'], ['buy', 'Закупщики'], ['pack', 'Фасовка'], ['bags', 'Рюкзаки'], ['fuel', 'Топливо'], ['exp', 'Экспорт']];
     let body = '';
     if (tab === 'list') {
@@ -85,7 +94,7 @@ export const views = {
       body = `<div class="fld"><label>Крупный шрифт (для магазина)</label><div class="ctl"><input type="checkbox" id="big"${ctx.state.big ? ' checked' : ''}></div></div>
         ${DEPT_ORDER.map(dep => { const r = rows.filter(x => x.dept === dep).sort((a, b) => a.p.name.localeCompare(b.p.name)); return r.length ? `<h3>${dep}</h3><ul class="list shop">${r.map(x => `<li class="${b[x.p.id] ? 'done' : ''}"><label><input type="checkbox" data-buy="${x.p.id}"${b[x.p.id] ? ' checked' : ''}><span><b>${esc(x.p.name)}</b><br><span class="muted small">нужно ${n0(x.total)} г${x.resG ? ` (в т.ч. резерв ${x.resPct}% = ${n0(x.resG)})` : ''}${x.reserve ? ` (в т.ч. аварийный запас ${n0(x.reserve)})` : ''}${x.packs && opts.round ? ` → ${x.packs} × ${x.p.pack} г = ${n0(x.buy)} г` : ''}</span></span></label><span class="muted small">резерв <input data-rp="${x.p.id}" type="number" min="0" step="any" style="width:56px" value="${trip.reserveItem?.[x.p.id] ?? ''}" placeholder="${trip.food?.reservePct ?? 0}"> %</span>${x.price ? `<span>${n0(x.price)} ${opts.currency}</span>` : ''}</li>`).join('')}</ul>` : ''; }).join('')}
         ${sum ? `<p><b>Итого ${n0(sum)} ${opts.currency}</b> · с человека ${n0(sum / n)} ${opts.currency}</p>` : '<p class="muted small">Цены не заданы. Их можно указать в карточке продукта.</p>'}
-        <p class="muted small">Резерв ${trip.food?.reservePct ?? 0}% от количества (для отдельных продуктов можно задать своё) и аварийный запас на ${P.reserve_days} дн. включены в список.</p>`;
+        <p class="muted small">Резерв ${trip.food?.reservePct ?? 0}% от количества (для отдельных продуктов можно задать своё) и аварийный запас на ${P.reserve_days} дн. включены в список.</p>${uncHtml}`;
     } else if (tab === 'buy') {
       ensureBuyers(trip);
       const opt = sel => '<option value="">не назначено</option>' + trip.buyers.map(x => '<option value="' + x.id + '"' + (x.id === sel ? ' selected' : '') + '>' + esc(x.name) + '</option>').join(''), sp = splitByBuyer(trip, rows);
@@ -120,7 +129,7 @@ export const views = {
         <label class="btn ghost filebtn">Загрузить поход (JSON)<input type="file" id="load" accept=".json" hidden></label><p class="warnmsg" id="msg"></p>`;
     }
     return {
-      html: `<h2>Покупки</h2><div class="subtabs">${tabs.map(([k, n]) => `<button data-st="${k}" class="${tab === k ? 'on' : ''}">${n}</button>`).join('')}</div><div class="${ctx.state.big && tab === 'list' ? 'bigfont' : ''}">${body}</div>`,
+      html: `<h2>Покупки</h2>${warnHtml}<div class="subtabs">${tabs.map(([k, n]) => `<button data-st="${k}" class="${tab === k ? 'on' : ''}">${n}</button>`).join('')}</div><div class="${ctx.state.big && tab === 'list' ? 'bigfont' : ''}">${body}</div>`,
       bind(root) {
         root.querySelectorAll('[data-st]').forEach(x => x.onclick = () => { ctx.state.shopTab = x.dataset.st; ctx.rerender(); });
         root.querySelector('#big')?.addEventListener('change', e => { ctx.state.big = e.target.checked; ctx.rerender(); });

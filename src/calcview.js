@@ -1,7 +1,7 @@
 // Вкладка «Расчёт»: слева сводка и дни с «Почему столько?», справа сетка меню (день × приём). Наборы переключаются сразу.
 import { allParams } from './params.js';
 import { computeTrip, tempText, isRest } from './engine.js';
-import { MEALS, buildMenu, itemsKcal, mealFor, possibleFor, menuProblems } from './menu.js';
+import { MEALS, buildMenu, itemsKcal, mealFor, possibleFor, menuProblems, checkMenu } from './menu.js';
 import { mealsOf, slotLabel } from './meals.js';
 import { repo as prepo, setActive } from './pstore.js';
 import { repo as mrepo } from './mstore.js';
@@ -24,7 +24,7 @@ export function sets(trip) {
   setActive(pset?.id); return { pset, mset };
 }
 export function sig(trip, pset, mset, P) {
-  return JSON.stringify([trip.meals, trip.group.map(p => [p.weight, p.height, p.age, p.sex, p.appetite, p.share, p.gear, p.veg, p.allergy, p.dislike]), trip.days, trip.prefs, trip.food, trip.gear, trip.adj, pset?.id, pset?.items.map(p => (p.on ? 1 : 0) + p.id).join(), mset?.id, mset?.dishes, P, activePlan(trip)?.id, activePlan(trip)?.rows]);
+  return JSON.stringify([trip.meals, trip.group.map(p => [p.weight, p.height, p.age, p.sex, p.appetite, p.share, p.gear, p.veg, p.allergy, p.dislike]), trip.days, trip.prefs, trip.food, trip.gear, trip.adj, pset?.id, pset?.items.map(p => [p.id, p.on ? 1 : 0, p.kcal, p.p, p.f, p.c, p.cat, p.tags, p.fresh, p.shelf, (p.aliases || []).join('/')].join(':')).join('|'), mset?.id, mset?.dishes, P, activePlan(trip)?.id, activePlan(trip)?.rows]);
 }
 
 // Возвращает {calc, menu, P, pset, mset}; пересобирает меню, если исходные данные изменились (закреплённое остаётся)
@@ -38,7 +38,9 @@ export function ensure(force = false) {
     if (pl) {
       const pm = planMenu(trip, calc, pl, mset, pset);
       // оригинал — только план, без генерации; обычный план закрепляет ячейки, генератор заполняет пустые
-      trip.menu = { ...(pl.readonly ? pm : { ...buildMenu(trip, calc, mset, pset, P, pm, seed), warnings: [...pm.warnings] }), sig: s, fromPlan: pl.id };
+      // предупреждения плана и проверки меню (минимумы приёмов, недобор, пустые блюда) складываются, а не затирают друг друга
+      const built = pl.readonly ? { ...pm, warnings: [...pm.warnings, ...checkMenu(trip, calc, pset, P, pm.days)] } : (b => ({ ...b, warnings: [...pm.warnings, ...b.warnings] }))(buildMenu(trip, calc, mset, pset, P, pm, seed));
+      trip.menu = { ...built, sig: s, fromPlan: pl.id };
     } else trip.menu = { ...buildMenu(trip, calc, mset, pset, P, trip.menu?.fromPlan ? null : trip.menu, seed), sig: s };
     saveTrip();
   }

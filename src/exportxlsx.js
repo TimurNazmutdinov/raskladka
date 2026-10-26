@@ -203,6 +203,8 @@ export async function buildWorkbook(D) {
 
 export async function exportExcel(D) {
   if (!D) throw new Error('нет данных для выгрузки: заполните поход');
+  const w = D.menu?.warnings || [];
+  if (w.length && typeof confirm === 'function' && !confirm(`В меню предупреждений: ${w.length}.\n\n${w.slice(0, 5).join('\n')}${w.length > 5 ? '\n…' : ''}\n\nВыгрузить в Excel всё равно?`)) return;
   const blob = await buildWorkbook(D), d = new Date(), stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   download(`Раскладка_${(D.trip.name || 'поход').replace(/[\\/:*?"<>|]/g, '').trim()}_${stamp}.xlsx`, blob);
 }

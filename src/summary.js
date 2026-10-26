@@ -21,7 +21,8 @@ export function buildSummary(D) {
   const factP = sum(items, i => (byId.get(i.pid)?.p || 0) * i.g / 100) / n / days;
   const goalK = S.kcalPerPersonDay, goalP = sum(calc.days, d => d.mac.p) / calc.days.length;
   const buyG = sum(rows, r => r.buy), cost = sum(rows, r => r.price), reserveG = sum(rows, r => r.reserve + (r.resG || 0));
-  const ratio = goalK ? factK / goalK : 0, okK = ratio >= 0.9 && ratio <= 1.1;
+  const dayRatio = calc.days.map((cd, i) => ({ day: i + 1, r: cd.target ? sum(Object.values(menu.days[i] || {}), e => itemsKcal(e?.items || [], prods)) / cd.target : 1 })), lowDays = dayRatio.filter(x => x.r < 0.85);
+  const ratio = goalK ? factK / goalK : 0, okK = ratio >= 0.9 && ratio <= 1.1 && !lowDays.length; // среднее может скрыть день без завтрака или ужина
   const noPrice = rows.filter(r => !r.p.price), noPack = rows.filter(r => !r.p.pack), noKcal = rows.filter(r => r.p.kcal == null);
   const noRecipe = counted.filter(c => c.e && !c.e.empty && c.e.name && !c.e.items?.length);
   const personal = cells.filter(c => c.e?.personal).length;
@@ -40,7 +41,7 @@ export function buildSummary(D) {
     { label: `Общая стоимость, ${currency}`, value: cost ? Math.round(cost) : null },
     { label: `Стоимость, ${currency}/чел/день`, value: cost ? Math.round(cost / n / days) : null },
     { label: 'Заполненных приёмов меню', value: `${filled.length} из ${counted.length}` },
-    { label: 'Статус калорий', value: okK ? 'OK' : 'Проверить', status: okK ? 'ok' : 'warn', note: `факт ${Math.round(ratio * 100)}% от цели (допустимо 90–110%)` },
+    { label: 'Статус калорий', value: okK ? 'OK' : 'Проверить', status: okK ? 'ok' : 'warn', note: `факт ${Math.round(ratio * 100)}% от цели (допустимо 90–110%)${lowDays.length ? `; дни ниже 85% цели: ${lowDays.map(x => `${x.day} (${Math.round(x.r * 100)}%)`).join(', ')}` : ''}` },
   ];
   const check = (label, bad, okText = 'OK') => ({ label, ok: !bad.length, text: bad.length ? `${bad.length}: ${bad.slice(0, 4).join(', ')}${bad.length > 4 ? '…' : ''}` : okText });
   const checks = [
@@ -49,6 +50,7 @@ export function buildSummary(D) {
     check('Все упаковки заполнены', noPack.map(r => r.p.name)),
     check('У всех продуктов есть КБЖУ', noKcal.map(r => r.p.name)),
     { label: 'Меню не пустое', ok: filled.length > 0, text: filled.length ? 'OK' : 'нет ни одного приёма' },
+    { label: 'Каждый день не ниже 85% цели', ok: !lowDays.length, text: lowDays.length ? lowDays.slice(0, 6).map(x => `день ${x.day} — ${Math.round(x.r * 100)}%`).join(', ') + (lowDays.length > 6 ? '…' : '') : 'OK' },
     { label: 'Резерв закупки', ok: true, text: `${trip.food?.reservePct ?? 0}% от количества + аварийный запас ${P.reserve_days} дн. (всего ≈ ${buyG ? Math.round(reserveG / Math.max(1, buyG - reserveG) * 100) : 0}% к рациону)` },
   ];
   if (personal) checks.push({ label: 'Приёмы «в личке»', ok: true, text: `${personal} (в раскладку не входят)` });

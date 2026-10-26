@@ -15,7 +15,7 @@
 
 ## Команды
 - Сборка после правки `src/`: `node tools/build.mjs` (обязательно, иначе приложение не увидит правки).
-- Тесты (каждый — `node tests/<имя>.mjs`): test_engine, test_gpx, test_import, test_units, test_links, test_template, test_simple, test_meals, test_summary, test_buyers. Ошибка — строка `FAIL`.
+- Тесты (каждый — `node tests/<имя>.mjs`): test_engine, test_gpx, test_import, test_units, test_links, test_template, test_simple, test_meals, test_summary, test_buyers, test_missing, test_diag, test_calc_matrix, test_water, test_fixes, test_sanity. Ошибка — строка `FAIL`; в test_sanity «ДЫРА» — известная проблема из QUESTIONS.md (не падение). `tests/_harness.mjs` — общая обвязка (IndexedDB в памяти, синтетический набор) для test_sanity и test_fixes.
 - Отчёт по встроенным блюдам: `node tests/report_dishes.mjs`.
 - Пустой шаблон загрузки: `node tools/make_blank_form.mjs`.
 - Обновить встроенный шаблон Excel: `powershell -ExecutionPolicy Bypass -File tools\update-template.ps1`.
