@@ -894,254 +894,6 @@ function daysSection(trip, save, ctx) {
 
 return {ensurePlan, fmtDate, rebuild, missing, daysSection};
 })();
-__m['simple.js'] = (() => {
-// Режим «Просто, на группу»: вместо списка участников — число человек и «средний участник».
-// Приложение создаёт n одинаковых виртуальных участников, поэтому меню, закупки и рюкзаки работают как раньше.
-const defaultSimple = () => ({ on: false, n: 12, weight: 70, height: 172, age: 35, veg: false, noEat: '', notes: '' });
-
-// d: { appetite, shareM, shareF } — значения по умолчанию из параметров. Пол чередуется (М, Ж, М, …) — средний состав.
-function virtualGroup(s, d) {
-  const n = Math.max(1, Math.min(60, Math.round(+s.n) || 1)), no = (s.noEat || '').trim();
-  return Array.from({ length: n }, (_, i) => {
-    const f = i % 2 === 1;
-    return { id: 'sim' + i, virtual: true, name: `Участник ${i + 1}`, sex: f ? 'F' : 'M', age: +s.age || 35, height: +s.height || 172, weight: +s.weight || 70, gear: null, appetite: d.appetite, share: f ? d.shareF : d.shareM, allergy: no, veg: !!s.veg, dislike: no };
-  });
-}
-
-// Дополняет сохранённый поход полями, которых в старых данных нет
-function ensureTrip(t) {
-  t.simple = { ...defaultSimple(), ...(t.simple || {}) };
-  t.food ||= {}; if (t.food.reservePct == null) t.food.reservePct = 0; if (t.food.reserveDays == null) t.food.reserveDays = 1; t.reserveItem ||= {};
-  t.buyers ||= []; t.buyDept ||= {}; t.buyItem ||= {};
-  t.prefs ||= {}; if (!('kcalGoal' in t.prefs)) t.prefs.kcalGoal = null; if (t.prefs.restPct == null) t.prefs.restPct = 80;
-  return t;
-}
-
-// Включает/выключает простой режим. При включении подробная группа запоминается и возвращается при выключении.
-function setSimpleMode(t, on, d) {
-  ensureTrip(t);
-  if (on) {
-    if (t.group.length && !t.group.every(p => p.virtual)) t.detailedGroup = t.group;
-    t.simple.on = true; t.group = virtualGroup(t.simple, d);
-  } else {
-    t.simple.on = false;
-    if (t.detailedGroup) { t.group = t.detailedGroup; delete t.detailedGroup; }
-  }
-  return t;
-}
-const rebuildSimple = (t, d) => { if (t.simple.on) t.group = virtualGroup(t.simple, d); return t; };
-
-return {defaultSimple, virtualGroup, ensureTrip, setSimpleMode, rebuildSimple};
-})();
-__m['meals.js'] = (() => {
-// Приёмы пищи в дне: список «слотов» {id, type b|l|d|s, name?, share %}. По умолчанию: завтрак, перекус, обед, перекус, ужин.
-// Меню хранит приём по id слота; тип слота определяет, какие блюда ему подходят (dish.meal).
-const TYPE_NAMES = { b: 'Завтрак', l: 'Обед', d: 'Ужин', s: 'Перекус' };
-const TYPES = Object.entries(TYPE_NAMES);
-
-// P — параметры; доли по умолчанию берутся из split_b / split_s / split_l / split_d (25/10/25/10/30)
-const defaultMeals = P => [
-  { id: 'b', type: 'b', share: P?.split_b ?? 25 }, { id: 's', type: 's', share: P?.split_s ?? 10 }, { id: 'l', type: 'l', share: P?.split_l ?? 25 },
-  { id: 's2', type: 's', share: P?.split_s ?? 10 }, { id: 'd', type: 'd', share: P?.split_d ?? 30 },
-];
-const mealsOf = (trip, P) => (trip?.meals?.length ? trip.meals : defaultMeals(P));
-const shareSum = slots => slots.reduce((a, s) => a + (+s.share || 0), 0);
-
-// Подпись приёма: своё имя или название типа; одинаковые типы нумеруются («Перекус 1», «Перекус 2»)
-function slotLabel(slots, id) {
-  const k = slots.findIndex(s => s.id === id); if (k < 0) return TYPE_NAMES[id] || id;
-  const s = slots[k]; if (s.name) return s.name;
-  const same = slots.filter(x => x.type === s.type && !x.name);
-  return same.length > 1 ? `${TYPE_NAMES[s.type]} ${same.indexOf(s) + 1}` : TYPE_NAMES[s.type];
-}
-const slotById = (slots, id) => slots.find(s => s.id === id);
-const newSlotId = slots => { let k = 1; while (slots.some(s => s.id === 'x' + k)) k++; return 'x' + k; };
-// Слот для строки плана/загрузки: первый слот нужного типа
-const firstSlotOfType = (slots, type) => slots.find(s => s.type === type)?.id ?? null;
-
-// Редактирование списка (чистые функции, возвращают новый список)
-const moveSlot = (slots, i, d) => { const j = i + d; if (j < 0 || j >= slots.length) return slots; const a = slots.slice(); [a[i], a[j]] = [a[j], a[i]]; return a; };
-const removeSlot = (slots, i) => (slots.length > 1 ? slots.filter((_, k) => k !== i) : slots);
-const addSlot = (slots, type = 's', share = 10) => [...slots, { id: newSlotId(slots), type, share }];
-
-return {TYPE_NAMES, TYPES, defaultMeals, mealsOf, shareSum, slotLabel, slotById, newSlotId, firstSlotOfType, moveSlot, removeSlot, addSlot};
-})();
-__m['trip.js'] = (() => {
-// Экран «Поход»: общий блок, группа, вкладка «Вручную». Данные хранятся в одном объекте trip.
-const {COVERS, DAY_TYPES, CATEGORIES} = __m['defaults.js'];
-const {getParam} = __m['params.js'];
-const {form, bindForm, esc} = __m['ui.js'];
-const {repo: prepo} = __m['pstore.js'];
-const {repo: mrepo} = __m['mstore.js'];
-const {daysSection, ensurePlan, rebuild} = __m['tripdays.js'];
-const store = __m['store.js'];
-const {defaultSimple, ensureTrip, setSimpleMode, rebuildSimple} = __m['simple.js'];
-const {TYPES, defaultMeals, mealsOf, shareSum, moveSlot, removeSlot, addSlot, slotLabel} = __m['meals.js'];
-
-const newTrip = () => ({
-  name: '', start: '', end: '', kind: 'mountain', category: CATEGORIES[0],
-  days: [], group: [], drops: [],
-  gear: { common: null, maxM: null, maxF: null },
-  food: { hot: '2', lunchHot: false },
-  prefs: { mode: 'std', custom: null, breakfast: 'milk', sugar: 'common', snacks: 'common', treat: false, budget: null, likes: '', dislikes: '', kcalGoal: null, restPct: 80 },
-  simple: defaultSimple(),
-});
-
-let trip;
-const loadTrip = async () => { trip = ensureTrip((await store.get('trips', 'current')) || newTrip()); return trip; };
-const splitP = () => ({ split_b: getParam('split_b'), split_l: getParam('split_l'), split_d: getParam('split_d'), split_s: getParam('split_s') });
-const simpleDefs = () => ({ appetite: getParam('appetite_def'), shareM: getParam('share_m'), shareF: getParam('share_f') });
-const save = () => store.put('trips', 'current', trip);
-const getTrip = () => trip;
-const saveTrip = save;
-const setTrip = t => { trip = ensureTrip(t); save(); };
-const back = (to, label) => `<button class="back" data-go="${to}">‹ ${label}</button>`;
-const SEX = [['M', 'М'], ['F', 'Ж']];
-const KG = 'кг';
-
-const F = {
-  trip: [
-    { k: 'name', label: 'Название' },
-    { k: 'kind', label: 'Вид', type: 'seg', opts: [['hike', 'Пеший'], ['mountain', 'Горный'], ['ski', 'Лыжный'], ['water', 'Водный']] },
-    { k: 'category', label: 'Категория', type: 'select', opts: CATEGORIES.map(c => [c, c]) },
-  ],
-  person: [
-    { k: 'name', label: 'Имя' }, { k: 'sex', label: 'Пол', type: 'seg', opts: SEX },
-    { k: 'age', label: 'Возраст', type: 'number', unit: 'лет' }, { k: 'height', label: 'Рост', type: 'number', unit: 'см' },
-    { k: 'weight', label: 'Вес', type: 'number', unit: KG }, { k: 'gear', label: 'Личное снаряжение', type: 'number', unit: KG },
-    { k: 'appetite', label: 'Коэффициент аппетита', type: 'number', help: 'Насколько человек ест больше или меньше обычного. 1.0 — как все, 1.2 — ест на пятую часть больше, 0.9 — меньше. Умножает его потребность в калориях, поэтому влияет на порции в раскладке. Если не знаешь, оставь 1.0; после похода приложение подскажет поправку.' },
-    { k: 'share', label: 'Доля общего груза', type: 'number', help: 'Какую часть общего груза (продукты, палатки, котлы, горелки) несёт человек. 1.0 — как остальные, меньше — несёт меньше, например 0.7. По этим долям на этапе «Покупки» считаются рюкзаки. Личное снаряжение сюда не входит, оно вводится отдельно.' },
-    { k: 'allergy', label: 'Аллергии' }, { k: 'veg', label: 'Вегетарианец', type: 'check' }, { k: 'dislike', label: 'Не ест' },
-  ],
-  simple: [
-    { k: 'n', label: 'Человек в группе', type: 'number' },
-    { k: 'weight', label: 'Средний вес', type: 'number', unit: KG }, { k: 'height', label: 'Средний рост', type: 'number', unit: 'см' }, { k: 'age', label: 'Средний возраст', type: 'number', unit: 'лет' },
-    { k: 'veg', label: 'Есть вегетарианцы', type: 'check', help: 'Тогда мясные продукты в меню не используются: меню одно на всю группу.' },
-    { k: 'noEat', label: 'Не едят / аллергии', help: 'Через запятую, например: орехи, грибы. Эти продукты в меню не попадут.' },
-    { k: 'notes', label: 'Заметки о предпочтениях', help: 'Свободный текст, например: «1 чел — без глютена, 2 чел — не ест рыбу». Программа его не разбирает: заметки попадут в сводку и в информацию закупщикам.' },
-  ],
-  goal: [
-    { k: 'kcalGoal', label: 'Цель по калориям', type: 'number', unit: 'ккал/чел/день', help: 'Если задана, она заменяет расчёт по нагрузке: каждый день цель одна и та же. Пусто — считать по нагрузке и режиму раскладки.' },
-    { k: 'restPct', label: 'Днёвка', type: 'number', unit: '% от цели', show: p => p.kcalGoal > 0 },
-  ],
-  gear: [
-    { k: 'common', label: 'Общественное снаряжение', type: 'number', unit: KG },
-    { k: 'maxM', label: 'Макс. рюкзак М', type: 'number', unit: KG }, { k: 'maxF', label: 'Макс. рюкзак Ж', type: 'number', unit: KG },
-  ],
-  food: [
-    { k: 'hot', label: 'Горячих приёмов в день', type: 'seg', opts: [['2', '2'], ['3', '3']] },
-    { k: 'lunchHot', label: 'Обед горячий (иначе перекус)', type: 'check' },
-    { k: 'reservePct', label: 'Резерв продуктов', type: 'number', unit: '% от количества', help: 'Сколько добавить к закупке каждого продукта сверх меню: любое число, 0 — без резерва. Для отдельного продукта своё значение задаётся в «Покупки» → «Список». Меню и калории от резерва не меняются.' },
-    { k: 'reserveDays', label: 'Аварийный запас', type: 'number', unit: 'дн', help: 'Калорийные продукты (орехи, шоколад, халва…) на столько дней сверх меню. 0 — без аварийного запаса.' },
-  ],
-  prefs: [
-    { k: 'mode', label: 'Режим раскладки', type: 'seg', opts: [['hungry', 'Голодная'], ['std', 'Стандарт'], ['full', 'Сытая'], ['custom', 'Своя']] },
-    { k: 'custom', label: 'Своё покрытие', type: 'number', unit: '%', show: p => p.mode === 'custom' },
-    { k: 'breakfast', label: 'Завтраки', type: 'seg', opts: [['milk', 'Молочные'], ['meat', 'Мясные']] },
-    { k: 'sugar', label: 'Сахар', type: 'seg', opts: [['common', 'В раскладке'], ['personal', 'В личке']] },
-    { k: 'snacks', label: 'Перекусы на ходу', type: 'seg', opts: [['common', 'В раскладке'], ['personal', 'В личке']] },
-    { k: 'lunchSplit', label: 'Обед весь день (пакетов)', type: 'seg', opts: [['1', '1'], ['2', '2'], ['3', '3']], help: 'Обед-перекус делится на 2–3 пакета (около 11:00, 13:30 и 16:00): в горах едят часто и понемногу.' },
-    { k: 'budget', label: 'Бюджет (необязательно)', type: 'number' },
-    { k: 'likes', label: 'Любимые блюда' }, { k: 'dislikes', label: 'Нелюбимые блюда' },
-  ],
-  drop: [
-    { k: 'after', label: 'После дня №', type: 'number' }, { k: 'what', label: 'Что в заброске' },
-  ],
-};
-
-const bound = (ctx, fields, obj, after) => root => bindForm(root, fields, obj, () => save(), () => { after?.(); ctx.rerender(); });
-const newPerson = () => ({ id: crypto.randomUUID(), name: '', sex: 'M', age: null, height: null, weight: null, gear: null, appetite: getParam('appetite_def'), share: getParam('share_m'), allergy: '', veg: false, dislike: '' });
-const link = (v, t, s) => `<li><button data-go="${v}">${t}<span class="muted">${s} ›</span></button></li>`;
-
-const views = {
-  main(_, ctx) {
-    ensurePlan(trip);
-    const ds = daysSection(trip, save, ctx);
-    return {
-      html: `<h2>Поход</h2>
-        <div class="cols2"><div><div id="tf">${form(F.trip, trip)}</div>
-        <div class="fld"><label>Набор продуктов</label><div class="ctl"><select id="sp">${prepo.list().map(s => `<option value="${s.id}"${s.id === trip.productSet ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></div></div>
-        <div class="fld"><label>Набор меню</label><div class="ctl"><select id="sm">${mrepo.list().map(s => `<option value="${s.id}"${s.id === trip.menuSet ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></div></div>
-        <ul class="list">${link('group', 'Группа', `${trip.group.length} чел`)}${link('gear', 'Снаряжение', trip.gear.common ? trip.gear.common + ' кг' : '—')}
-        ${link('food', 'Питание и заброски', `${trip.food.hot} горячих`)}${link('prefs', 'Предпочтения', '')}</ul></div>
-        <div></div></div>${ds.html}`,
-      bind(root) {
-        bindForm(root.querySelector('#tf'), F.trip, trip, () => save(), () => ctx.rerender()); ds.bind(root);
-        root.querySelector('#sp').onchange = e => { trip.productSet = e.target.value; const m = mrepo.list().find(x => x.productSetId === e.target.value); if (m && mrepo.get(trip.menuSet)?.productSetId !== e.target.value) trip.menuSet = m.id; save(); ctx.rerender(); };
-        root.querySelector('#sm').onchange = e => { trip.menuSet = e.target.value; const m = mrepo.get(e.target.value); if (m && prepo.get(m.productSetId)) trip.productSet = m.productSetId; save(); ctx.rerender(); };
-      },
-    };
-  },
-
-  group(_, ctx) {
-    const on = trip.simple.on;
-    const mode = `<div class="fld"><label>Как считаем</label><div class="ctl"><div class="seg"><button data-gmode="0" class="${on ? '' : 'on'}">Подробно, по участникам</button><button data-gmode="1" class="${on ? 'on' : ''}">Просто, на группу</button></div></div></div>`;
-    const goal = `<h3>Цель по калориям</h3><div id="goalf">${form(F.goal, trip.prefs)}</div>`;
-    return {
-      html: `${back('', 'Поход')}<h2>Группа</h2>${mode}
-        ${on ? `<p class="muted">Расчёт усреднённый: все участники одинаковые, пол чередуется. Чтобы учесть каждого, переключите на «Подробно».</p><div id="simplef">${form(F.simple, trip.simple)}</div>`
-          : `${trip.group.length ? `<ul class="list">${trip.group.map((p, i) => `<li><button data-go="person" data-arg="${i}"><span>${esc(p.name) || 'Без имени'} · ${p.sex === 'F' ? 'Ж' : 'М'}${p.age ? ' · ' + p.age : ''}</span><span class="muted">${p.weight ? p.weight + ' кг' : ''} ›</span></button></li>`).join('')}</ul>` : '<p class="empty">Участников пока нет.</p>'}
-        <button class="btn" id="add">Добавить участника</button>`}
-        ${goal}`,
-      bind(root) {
-        root.querySelectorAll('[data-gmode]').forEach(b => b.onclick = () => { setSimpleMode(trip, b.dataset.gmode === '1', simpleDefs()); save(); ctx.rerender(); });
-        if (on) bindForm(root.querySelector('#simplef'), F.simple, trip.simple, () => { rebuildSimple(trip, simpleDefs()); save(); }, () => ctx.rerender());
-        else root.querySelector('#add').onclick = () => { trip.group.push(newPerson()); save(); ctx.go('person', trip.group.length - 1); };
-        bindForm(root.querySelector('#goalf'), F.goal, trip.prefs, k => { save(); if (k === 'kcalGoal') ctx.rerender(); }, () => ctx.rerender());
-      },
-    };
-  },
-
-  person(i, ctx) {
-    const p = trip.group[i];
-    const prevSex = p.sex;
-    return {
-      html: `${back('group', 'Группа')}<h2>Участник</h2>${form(F.person, p)}<button class="btn danger" id="del">Удалить участника</button>`,
-      bind(root) {
-        bindForm(root, F.person, p, k => {
-          if (k === 'sex' && p.share === getParam(prevSex === 'F' ? 'share_f' : 'share_m')) p.share = getParam(p.sex === 'F' ? 'share_f' : 'share_m');
-          save();
-        }, () => ctx.rerender());
-        root.querySelector('#del').onclick = () => { trip.group.splice(i, 1); save(); ctx.go('group'); };
-      },
-    };
-  },
-
-  gear: (_, ctx) => ({ html: `${back('', 'Поход')}<h2>Снаряжение</h2>${form(F.gear, trip.gear)}`, bind: bound(ctx, F.gear, trip.gear) }),
-  prefs: (_, ctx) => ({ html: `${back('', 'Поход')}<h2>Предпочтения</h2>${form(F.prefs, trip.prefs)}`, bind: bound(ctx, F.prefs, trip.prefs) }),
-
-  food(_, ctx) {
-    const slots = mealsOf(trip, splitP()), sum = shareSum(slots);
-    const mealsHtml = `<h3>Приёмы пищи в день</h3><p class="muted small">Добавляйте приёмы и меняйте их порядок. Доля — часть дневных калорий. «Перекус» подбирается из сладкого и орехов набора, если в наборе нет блюд-перекусов.</p>
-      ${slots.map((s, i) => `<div class="mealrow"><b>${i + 1}</b> <select data-mt="${i}">${TYPES.map(([k, n]) => `<option value="${k}"${k === s.type ? ' selected' : ''}>${n}</option>`).join('')}</select> <input data-mn="${i}" placeholder="${esc(slotLabel(slots, s.id))}" value="${esc(s.name || '')}" style="width:130px"> <input data-ms="${i}" type="number" min="0" max="100" value="${s.share}" style="width:60px">% <button class="mini" data-mu="${i}">▲</button><button class="mini" data-mdn="${i}">▼</button><button class="mini" data-mx="${i}">✕</button></div>`).join('')}
-      <p class="${sum === 100 ? 'good' : 'warnmsg'}">Сумма долей: ${sum}%${sum === 100 ? '' : ' — должна быть 100%'}</p>
-      <div class="btnrow"><button class="btn" id="addmeal">Добавить приём</button><button class="btn ghost" id="resetmeals">Стандартный план</button></div>`;
-    return {
-      html: `${back('', 'Поход')}<h2>Питание и заброски</h2>${mealsHtml}<div id="foodf">${form(F.food, trip.food)}</div>
-        <h3>Заброски</h3>
-        ${trip.drops.map((d, i) => `<div class="drop">${form(F.drop, d)}<button class="mini" data-deldrop="${i}">Удалить</button></div>`).join('') || '<p class="empty">Заброски не заданы.</p>'}
-        <button class="btn" id="adddrop">Добавить заброску</button>`,
-      bind(root) {
-        bound(ctx, F.food, trip.food)(root.querySelector('#foodf'));
-        const edit = fn => { trip.meals = fn(slots.map(s => ({ ...s }))); save(); ctx.rerender(); };
-        root.querySelectorAll('[data-mt]').forEach(el => el.onchange = () => edit(a => { a[+el.dataset.mt].type = el.value; return a; }));
-        root.querySelectorAll('[data-mn]').forEach(el => el.onchange = () => edit(a => { a[+el.dataset.mn].name = el.value.trim() || undefined; return a; }));
-        root.querySelectorAll('[data-ms]').forEach(el => el.onchange = () => edit(a => { a[+el.dataset.ms].share = Math.max(0, Math.min(100, +el.value || 0)); return a; }));
-        root.querySelectorAll('[data-mu]').forEach(el => el.onclick = () => edit(a => moveSlot(a, +el.dataset.mu, -1)));
-        root.querySelectorAll('[data-mdn]').forEach(el => el.onclick = () => edit(a => moveSlot(a, +el.dataset.mdn, 1)));
-        root.querySelectorAll('[data-mx]').forEach(el => el.onclick = () => edit(a => removeSlot(a, +el.dataset.mx)));
-        root.querySelector('#addmeal').onclick = () => edit(a => addSlot(a));
-        root.querySelector('#resetmeals').onclick = () => { delete trip.meals; save(); ctx.rerender(); };
-        root.querySelectorAll('.drop').forEach((el, i) => bindForm(el, F.drop, trip.drops[i], save, () => ctx.rerender()));
-        root.querySelector('#adddrop').onclick = () => { trip.drops.push({ after: null, what: '' }); save(); ctx.rerender(); };
-        root.querySelectorAll('[data-deldrop]').forEach(b => b.onclick = () => { trip.drops.splice(+b.dataset.deldrop, 1); save(); ctx.rerender(); });
-      },
-    };
-  },
-};
-
-return {newTrip, loadTrip, getTrip, saveTrip, setTrip, views};
-})();
 __m['products.js'] = (() => {
 // Справочник категорий (структура, не данные). Сами продукты живут в наборах (этап 4) и в IndexedDB.
 const CATS = [
@@ -1812,6 +1564,7 @@ const {form, bindForm, esc, modal} = __m['ui.js'];
 const {openLoad} = __m['loadview.js'];
 
 const ui = { id: null, cat: 'all', q: '' };
+const focusSet = id => { ui.id = id; ui.cat = 'all'; }; // открыть вкладку «Продукты» на нужном наборе (кнопка «Настроить» в «Поход»)
 const catName = k => (CATS.find(c => c[0] === k) || [, k])[1];
 const PF = [
   { k: 'name', label: 'Название' }, { k: 'cat', label: 'Категория', type: 'select', opts: CATS },
@@ -1965,7 +1718,7 @@ const views = {
         ${list.map(p => `<tr data-p="${p.id}"><td><input type="checkbox" data-on="${p.id}"${p.on ? ' checked' : ''}${set.readonly ? ' disabled' : ''}></td><td>${esc(p.name)}${p.check ? ' <span class="dot">?</span>' : ''}${p.kcal == null || (p.baseUnit && p.baseUnit !== 'г') ? ' <span class="bad small">не считается</span>' : ''}${p.fresh ? ' <span class="muted small">свежий</span>' : ''}</td><td>${esc(p.catOrig ?? catName(p.cat))}</td><td>${p.kcal ?? ''}</td><td>${p.p ?? ''}</td><td>${p.f ?? ''}</td><td>${p.c ?? ''}</td><td>${p.pack ?? ''}${p.baseUnit && p.baseUnit !== 'г' ? ` <span class="muted small">${esc(p.baseUnit)}</span>` : ''}</td><td>${p.shelf == null ? '' : p.shelf >= 999 ? '∞' : p.shelf}</td><td>${p.price ?? ''}</td></tr>`).join('') || '<tr><td colspan="10" class="muted">Ничего не найдено</td></tr>'}</table></div>`,
       bind(root) {
         const re = () => ctx.rerender();
-        bindTabs(root, { repo, rerender: re, onSelect: id => { ui.id = id; ui.cat = 'all'; re(); }, onAdd: () => addSetDialog(set, id => { ui.id = id; re(); }, re) });
+        bindTabs(root, { repo, rerender: re, onSelect: id => { ui.id = id; ui.cat = 'all'; re(); }, onAdd: () => addSetDialog(set, id => { ui.id = id; re(); }, re, ctx) });
         const q2 = root.querySelector('#q'); q2.oninput = () => { ui.q = q2.value; const pos = q2.selectionStart; re(); const n = document.querySelector('#q'); n.focus(); n.setSelectionRange(pos, pos); };
         root.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { ui.cat = b.dataset.c; re(); });
         root.querySelectorAll('[data-on]').forEach(c => c.onchange = async () => { set.items.find(p => p.id === c.dataset.on).on = c.checked; await repo.save(set); re(); });
@@ -1988,14 +1741,14 @@ const views = {
   },
 };
 
-function addSetDialog(cur, done, rerender) {
+function addSetDialog(cur, done, rerender, ctx) {
   modal(() => ({
     title: 'Новый набор продуктов',
     html: `<ul class="list"><li><button data-k="empty">Пустой набор<span>›</span></button></li><li><button data-k="copy">Копия текущего («${esc(cur.name)}»)<span>›</span></button></li><li><button data-k="file">Из файла (.xlsx, .csv, .json)<span>›</span></button></li><li><button data-k="manual">Вручную, по одному продукту<span>›</span></button></li></ul>`,
     bind(root, refresh, close) {
       root.querySelectorAll('[data-k]').forEach(b => b.onclick = async () => {
         const k = b.dataset.k; close();
-        if (k === 'file') return importDialog(done);
+        if (k === 'file') return openLoad(ctx, { only: 'products', after: rerender }); // общее окно загрузки; старое importDialog больше не вызывается
         const name = prompt('Название набора', k === 'copy' ? cur.name + ' (копия)' : 'Новый набор'); if (!name) return;
         const s = await repo.add({ id: repo.uid(), name: name.trim(), items: k === 'copy' ? JSON.parse(JSON.stringify(cur.items)) : [] });
         done(s.id); if (k === 'manual') setTimeout(() => addProductDialog(s, rerender), 50);
@@ -2004,7 +1757,40 @@ function addSetDialog(cur, done, rerender) {
   }));
 }
 
-return {COLS, productRows, parseProducts, searchOff, byBarcode, views};
+return {focusSet, COLS, productRows, parseProducts, searchOff, byBarcode, views};
+})();
+__m['meals.js'] = (() => {
+// Приёмы пищи в дне: список «слотов» {id, type b|l|d|s, name?, share %}. По умолчанию: завтрак, перекус, обед, перекус, ужин.
+// Меню хранит приём по id слота; тип слота определяет, какие блюда ему подходят (dish.meal).
+const TYPE_NAMES = { b: 'Завтрак', l: 'Обед', d: 'Ужин', s: 'Перекус' };
+const TYPES = Object.entries(TYPE_NAMES);
+
+// P — параметры; доли по умолчанию берутся из split_b / split_s / split_l / split_d (25/10/25/10/30)
+const defaultMeals = P => [
+  { id: 'b', type: 'b', share: P?.split_b ?? 25 }, { id: 's', type: 's', share: P?.split_s ?? 10 }, { id: 'l', type: 'l', share: P?.split_l ?? 25 },
+  { id: 's2', type: 's', share: P?.split_s ?? 10 }, { id: 'd', type: 'd', share: P?.split_d ?? 30 },
+];
+const mealsOf = (trip, P) => (trip?.meals?.length ? trip.meals : defaultMeals(P));
+const shareSum = slots => slots.reduce((a, s) => a + (+s.share || 0), 0);
+
+// Подпись приёма: своё имя или название типа; одинаковые типы нумеруются («Перекус 1», «Перекус 2»)
+function slotLabel(slots, id) {
+  const k = slots.findIndex(s => s.id === id); if (k < 0) return TYPE_NAMES[id] || id;
+  const s = slots[k]; if (s.name) return s.name;
+  const same = slots.filter(x => x.type === s.type && !x.name);
+  return same.length > 1 ? `${TYPE_NAMES[s.type]} ${same.indexOf(s) + 1}` : TYPE_NAMES[s.type];
+}
+const slotById = (slots, id) => slots.find(s => s.id === id);
+const newSlotId = slots => { let k = 1; while (slots.some(s => s.id === 'x' + k)) k++; return 'x' + k; };
+// Слот для строки плана/загрузки: первый слот нужного типа
+const firstSlotOfType = (slots, type) => slots.find(s => s.type === type)?.id ?? null;
+
+// Редактирование списка (чистые функции, возвращают новый список)
+const moveSlot = (slots, i, d) => { const j = i + d; if (j < 0 || j >= slots.length) return slots; const a = slots.slice(); [a[i], a[j]] = [a[j], a[i]]; return a; };
+const removeSlot = (slots, i) => (slots.length > 1 ? slots.filter((_, k) => k !== i) : slots);
+const addSlot = (slots, type = 's', share = 10) => [...slots, { id: newSlotId(slots), type, share }];
+
+return {TYPE_NAMES, TYPES, defaultMeals, mealsOf, shareSum, slotLabel, slotById, newSlotId, firstSlotOfType, moveSlot, removeSlot, addSlot};
 })();
 __m['menu.js'] = (() => {
 // Генератор меню: собирает меню ТОЛЬКО из готовых блюд выбранного набора меню и продуктов выбранного набора продуктов.
@@ -2194,6 +1980,392 @@ function dishFacts(dish, byName) {
 }
 
 return {MEALS, allowed, itemsKcal, nameMap, altNames, lunchGroups, buildMenu, mealFor, possibleFor, findDish, menuProblems, menuWarnings, dishFacts};
+})();
+__m['menuview.js'] = (() => {
+// Экран «Меню»: вкладки-наборы меню, список блюд по приёмам пищи, редактор блюда, проверка продуктов, импорт и шаблон.
+const {repo, MEAL_NAMES, COND} = __m['mstore.js'];
+const {repo: prepo} = __m['pstore.js'];
+const {menuProblems, altNames} = __m['menu.js'];
+const {tabsHtml, bindTabs} = __m['tabsui.js'];
+const {readTable, writeXlsx, download} = __m['xlsx.js'];
+const {esc, modal} = __m['ui.js'];
+const {openLoad} = __m['loadview.js'];
+
+const ui = { id: null };
+const focusSet = id => { ui.id = id; }; // открыть вкладку «Меню» на нужном наборе (кнопка «Настроить» в «Поход»)
+const MCOLS = ['Набор', 'Приём пищи', 'Блюдо', 'Продукт', 'Г_на_чел', 'Мин_г', 'Макс_г', 'Условия', 'Варка_мин'];
+const MEAL_KEY = { завтрак: 'b', обед: 'l', ужин: 'd', перекус: 's', карпит: 's' };
+const norm = s => String(s ?? '').toLowerCase().replace(/[\s_]/g, '');
+const condName = k => (COND.find(c => c[0] === k) || [, k])[1];
+const condKey = t => { const x = String(t).trim().toLowerCase(); return (COND.find(c => c[1] === x || c[0] === x) || (x.includes('3000') ? ['alt3000'] : x.startsWith('перв') ? ['first2'] : []))[0]; };
+
+function menuRows(set) {
+  const rows = [MCOLS];
+  set.dishes.forEach(d => d.ing.forEach((i, k) => rows.push([set.name, MEAL_NAMES[d.meal], d.name, i.name, i.g, i.min ?? '', i.max ?? '', k === 0 ? (d.cond || []).map(condName).join(', ') : '', k === 0 ? d.cook ?? '' : ''])));
+  return rows;
+}
+
+// Файл → наборы меню; errors построчно
+function parseMenu(rows) {
+  const hdr = (rows[0] || []).map(norm), at = n => hdr.indexOf(norm(n)), errors = [], sets = new Map(), dishes = new Map();
+  for (const n of ['Приём пищи', 'Блюдо', 'Продукт', 'Г_на_чел']) if (at(n) < 0) errors.push(`нет колонки «${n}»`);
+  if (errors.length) return { sets: [], errors };
+  rows.slice(1).forEach((r, i) => {
+    const ln = i + 2, g = n => (at(n) >= 0 ? r[at(n)] : ''), num = n => { const v = g(n); return v === '' || v == null ? null : +String(v).replace(',', '.'); };
+    if (!r.some(v => v !== '' && v != null)) return;
+    const mk = MEAL_KEY[String(g('Приём пищи')).trim().toLowerCase()]; if (!mk) { errors.push(`строка ${ln}: неизвестный приём пищи «${g('Приём пищи')}»`); return; }
+    const dn = String(g('Блюдо') ?? '').trim(); if (!dn) { errors.push(`строка ${ln}: нет названия блюда`); return; }
+    const pn = String(g('Продукт') ?? '').trim(); if (!pn) { errors.push(`строка ${ln}: нет продукта`); return; }
+    const gr = num('Г_на_чел'); if (gr == null || isNaN(gr) || gr <= 0) { errors.push(`строка ${ln}: нет граммов на человека`); return; }
+    const sn = String(g('Набор') || 'Из файла').trim(), key = sn + '|' + mk + '|' + dn;
+    if (!sets.has(sn)) sets.set(sn, { name: sn, dishes: [] });
+    let d = dishes.get(key);
+    if (!d) { d = { id: 'd' + dishes.size + Date.now().toString(36), meal: mk, name: dn, cook: num('Варка_мин') || 0, cond: [], on: true, ing: [] }; dishes.set(key, d); sets.get(sn).dishes.push(d); }
+    const cs = String(g('Условия') || '').split(/[,;]/).map(condKey).filter(Boolean); if (cs.length) d.cond = [...new Set([...d.cond, ...cs])];
+    d.ing.push({ name: pn, g: gr, min: num('Мин_г') ?? Math.round(gr * .7), max: num('Макс_г') ?? Math.round(gr * 1.5) });
+  });
+  dishes.forEach(d => { if (!d.cond.length) d.cond = ['any']; });
+  return { sets: [...sets.values()], errors };
+}
+
+function dishDialog(set, dish, done) {
+  if (set.readonly) return;
+  const isNew = !set.dishes.includes(dish), names = (prepo.get(set.productSetId) || prepo.first()).items.map(p => p.name);
+  modal(() => ({
+    title: isNew ? 'Новое блюдо' : dish.name,
+    html: `<datalist id="pn">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+      <div class="fld"><label>Название</label><div class="ctl"><input data-f="name" value="${esc(dish.name)}" style="width:240px;text-align:left"></div></div>
+      <div class="fld"><label>Приём пищи</label><div class="ctl"><select data-f="meal">${Object.entries(MEAL_NAMES).map(([k, n]) => `<option value="${k}"${dish.meal === k ? ' selected' : ''}>${n}</option>`).join('')}</select></div></div>
+      <div class="fld"><label>Время варки</label><div class="ctl"><input type="number" data-f="cook" value="${dish.cook ?? 0}"><span class="muted unit">мин</span></div></div>
+      <div class="fld"><label>Включено</label><div class="ctl"><input type="checkbox" data-f="on" ${dish.on ? 'checked' : ''}></div></div>
+      <h3>Условия применения</h3><div class="chips">${COND.map(([k, n]) => `<button data-c="${k}" class="${(dish.cond || []).includes(k) ? 'on' : ''}">${n}</button>`).join('')}</div>
+      <p class="muted small">Блюдо подходит, если выполняется любое отмеченное условие.</p>
+      <h3>Продукты, г на человека</h3><div class="tbl"><table class="dtable"><tr><th>Продукт (можно «А|Б»)</th><th>База</th><th>Мин</th><th>Макс</th><th></th></tr>
+      ${dish.ing.map((i, k) => `<tr><td><input list="pn" data-i="${k}:name" value="${esc(i.name)}" style="width:230px"></td><td><input type="number" data-i="${k}:g" value="${i.g}" style="width:64px"></td><td><input type="number" data-i="${k}:min" value="${i.min ?? ''}" style="width:64px"></td><td><input type="number" data-i="${k}:max" value="${i.max ?? ''}" style="width:64px"></td><td><button class="mini" data-x="${k}">×</button></td></tr>`).join('')}</table></div>
+      <button class="mini" id="addi">+ Продукт</button>
+      <div class="btnrow"><button class="btn" id="sv">Сохранить</button>${isNew ? '' : '<button class="btn danger" id="del">Удалить блюдо</button>'}<button class="btn ghost" id="cn">Закрыть</button></div>`,
+    bind(root, refresh, close) {
+      root.querySelectorAll('[data-f]').forEach(el => el.onchange = () => { const k = el.dataset.f; dish[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? +el.value : el.value; });
+      root.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { const k = b.dataset.c; const c = new Set(dish.cond || []); if (k === 'any') { c.clear(); c.add('any'); } else { c.delete('any'); c.has(k) ? c.delete(k) : c.add(k); } dish.cond = c.size ? [...c] : ['any']; refresh(); });
+      root.querySelectorAll('[data-i]').forEach(el => el.onchange = () => { const [k, f] = el.dataset.i.split(':'); const v = f === 'name' ? el.value : (el.value === '' ? null : +el.value); dish.ing[+k][f] = v; });
+      root.querySelectorAll('[data-x]').forEach(b => b.onclick = () => { dish.ing.splice(+b.dataset.x, 1); refresh(); });
+      root.querySelector('#addi').onclick = () => { dish.ing.push({ name: '', g: 50, min: 35, max: 75 }); refresh(); };
+      root.querySelector('#sv').onclick = async () => { if (!dish.name.trim()) return; dish.ing = dish.ing.filter(i => i.name.trim() && i.g > 0); if (isNew) set.dishes.push(dish); await repo.save(set); close(); done(); };
+      root.querySelector('#del')?.addEventListener('click', async () => { set.dishes = set.dishes.filter(d => d !== dish); await repo.save(set); close(); done(); });
+      root.querySelector('#cn').onclick = close;
+    },
+  }));
+}
+
+function problemsDialog(set, done) {
+  modal(() => {
+    const pset = prepo.get(set.productSetId) || prepo.first(), pr = menuProblems(set, pset), all = pset.items;
+    return {
+      title: `Проверка: «${set.name}» и набор продуктов «${pset.name}»`,
+      html: pr.length ? `<p class="muted">Этих продуктов нет в наборе продуктов или они не выбраны. Включите продукт или замените его в блюде.</p>
+        <div class="tbl"><table class="dtable"><tr><th>Блюдо</th><th>Продукт</th><th>Действие</th></tr>${pr.map((p, k) => `<tr><td>${esc(p.dish.name)}</td><td>${esc(p.ing.name)}</td><td>${p.alts.filter(a => a.state === 'off').map(a => `<button class="mini" data-on="${a.id}">Включить «${esc(all.find(x => x.id === a.id)?.name)}»</button>`).join(' ')}<select data-rep="${k}"><option value="">Заменить на…</option>${all.filter(x => x.on).map(x => `<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('')}</select></td></tr>`).join('')}</table></div>` : '<p class="good"><b>Проблем нет:</b> все продукты блюд есть в наборе и выбраны.</p>',
+      bind(root, refresh) {
+        root.querySelectorAll('[data-on]').forEach(b => b.onclick = async () => { const p = all.find(x => x.id === b.dataset.on); p.on = true; await prepo.save(pset); done(); refresh(); });
+        root.querySelectorAll('[data-rep]').forEach(s => s.onchange = async () => { if (!s.value) return; pr[+s.dataset.rep].ing.name = s.value; await repo.save(set); done(); refresh(); });
+      },
+    };
+  });
+}
+
+function importDialog(done) {
+  let res = null, err = '';
+  modal(() => ({
+    title: 'Набор меню из файла',
+    html: `<p class="muted">Файл .xlsx, .csv или .json, колонки: ${MCOLS.join('; ')}. Одна строка — один продукт блюда. Условия через запятую: ${COND.map(c => c[1]).join(', ')}.</p>
+      <div class="btnrow"><label class="btn ghost filebtn">Выбрать файл<input type="file" id="f" accept=".xlsx,.csv,.json" hidden></label><button class="btn ghost" id="tpl">Скачать шаблон</button></div><p class="warnmsg">${esc(err)}</p>
+      ${res ? `<h3>Предпросмотр: наборов ${res.sets.length}, блюд ${res.sets.reduce((s, x) => s + x.dishes.length, 0)}${res.errors.length ? `, ошибок ${res.errors.length}` : ''}</h3>
+        ${res.errors.length ? `<ul class="warnlist">${res.errors.slice(0, 30).map(e => `<li>${esc(e)}</li>`).join('')}</ul><p class="muted small">Строки с ошибками не загрузятся.</p>` : ''}
+        <ul class="list">${res.sets.map(s => `<li><span>${esc(s.name)}</span><span class="muted">${s.dishes.length} блюд</span></li>`).join('')}</ul>
+        <div class="btnrow"><button class="btn" id="load" ${res.sets.length ? '' : 'disabled'}>Загрузить</button></div>` : ''}`,
+    bind(root, refresh, close) {
+      root.querySelector('#tpl').onclick = async () => download('Шаблон_набора_меню.xlsx', await writeXlsx([{ name: 'Меню', rows: [MCOLS, ['Мой набор', 'Ужин', 'Гречка с тушёнкой', 'Гречка', 90, 63, 135, 'любой день', 20], ['Мой набор', 'Ужин', 'Гречка с тушёнкой', 'Тушёнка говяжья', 70, 49, 105, '', ''], ['Мой набор', 'Обед', 'Горячий обед', 'Суп в пакете', 25, 18, 38, 'днёвка, холод', 10]] }]));
+      root.querySelector('#f').onchange = async e => { const f = e.target.files[0]; if (!f) return; err = ''; try { res = parseMenu(await readTable(f)); } catch (x) { err = x.message; res = null; } refresh(); };
+      root.querySelector('#load')?.addEventListener('click', async () => {
+        let last = null;
+        for (const s of res.sets) { if (!repo.canAdd()) { alert('Достигнут максимум 10 наборов меню.'); break; } last = await repo.add({ id: repo.uid(), name: s.name, productSetId: prepo.first().id, dishes: s.dishes }); }
+        close(); if (last) done(last.id);
+      });
+    },
+  }));
+}
+
+function addSetDialog(cur, done, rerender, ctx) {
+  modal(() => ({
+    title: 'Новый набор меню',
+    html: `<ul class="list"><li><button data-k="empty">Пустой набор<span>›</span></button></li><li><button data-k="copy">Копия текущего («${esc(cur.name)}»)<span>›</span></button></li><li><button data-k="file">Из файла (.xlsx, .csv, .json)<span>›</span></button></li><li><button data-k="manual">Вручную, по одному блюду<span>›</span></button></li></ul>`,
+    bind(root, refresh, close) {
+      root.querySelectorAll('[data-k]').forEach(b => b.onclick = async () => {
+        const k = b.dataset.k; close();
+        if (k === 'file') return openLoad(ctx, { only: 'dishes', after: rerender }); // общее окно загрузки; старое importDialog больше не вызывается
+        const name = prompt('Название набора', k === 'copy' ? cur.name + ' (копия)' : 'Новый набор'); if (!name) return;
+        const s = await repo.add({ id: repo.uid(), name: name.trim(), productSetId: cur.productSetId, dishes: k === 'copy' ? JSON.parse(JSON.stringify(cur.dishes)) : [] });
+        done(s.id); if (k === 'manual') setTimeout(() => dishDialog(s, { id: 'd' + Date.now().toString(36), meal: 'd', name: '', cook: 0, cond: ['any'], on: true, ing: [{ name: '', g: 80, min: 56, max: 120 }] }, rerender), 50);
+      });
+    },
+  }));
+}
+
+const views = {
+  menus(_, ctx) {
+    const trip = ctx.trip(), sets = repo.list();
+    if (!repo.get(ui.id)) ui.id = (repo.get(trip.menuSet) || repo.first()).id;
+    const set = repo.get(ui.id), pset = prepo.get(set.productSetId) || prepo.first(), pr = menuProblems(set, pset);
+    return {
+      html: `<h2>Меню</h2>${tabsHtml(sets, set.id, trip.menuSet)}
+        <div class="btnrow">${set.readonly ? '' : '<button class="mini" id="ren">Переименовать</button>'}<button class="mini" id="dup" ${repo.canAdd() ? '' : 'disabled'}>Дублировать</button><button class="mini" id="del">Удалить</button><button class="mini" id="exp">В файл</button><button class="mini" id="tpl">Скачать шаблон</button><button class="mini" id="use">${set.id === trip.menuSet ? 'Используется в походе ✓' : 'Использовать в походе'}</button></div>
+        <div class="fld"><label>Набор продуктов для этого меню</label><div class="ctl"><select id="psel">${prepo.list().map(s => `<option value="${s.id}"${s.id === pset.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></div></div>
+        <div class="btnrow"><button class="btn ${pr.length ? '' : 'ghost'}" id="chk">Проверка продуктов${pr.length ? ` · проблем: ${pr.length}` : ' · ок'}</button>${set.readonly ? '' : '<button class="btn" id="addd" style="margin-left:auto">Добавить блюдо</button>'}</div>
+        <div class="btnrow"><button class="btn ghost" id="ldd">Загрузить блюда</button><button class="btn ghost" id="ldl">Загрузить меню (план)</button><button class="btn ghost" id="lda">Загрузить всё из файла</button>${set.readonly ? '<span class="muted small">🔒 Оригинал, только чтение: скопируйте набор («Дублировать»), чтобы менять.</span>' : ''}</div>
+        ${pr.length ? `<p class="warnmsg small">В меню есть продукты, которых нет в наборе «${esc(pset.name)}» или они выключены. Нажмите «Проверка продуктов».</p>` : ''}
+        ${[...Object.entries(MEAL_NAMES), ['', 'Без приёма пищи (его задаёт план)']].filter(([m]) => m || set.dishes.some(d => !d.meal)).map(([m, n]) => { const ds = set.dishes.filter(d => (d.meal || '') === m); return `<h3>${n} · ${ds.length}</h3>${ds.length ? `<div class="tbl"><table class="dtable"><tr><th></th><th>Блюдо</th><th>Состав, г на человека</th><th>Условия</th><th>Варка</th></tr>${ds.map(d => `<tr data-d="${d.id}" class="${d.on ? '' : 'off'}"><td><input type="checkbox" data-on="${d.id}" ${d.on ? 'checked' : ''}${set.readonly ? ' disabled' : ''}></td><td>${esc(d.name)}</td><td class="muted small" style="white-space:normal">${d.ing.map(i => `${esc(String(i.name).split('|')[0])} ${i.g}${i.unit && i.unit !== 'г' ? ' ' + esc(i.unit) : ''}`).join(', ')}</td><td>${(d.cond || []).map(condName).join(', ')}</td><td>${d.cook || 0} мин</td></tr>`).join('')}</table></div>` : '<p class="muted small">Блюд нет.</p>'}`; }).join('')}`,
+      bind(root) {
+        const re = () => ctx.rerender();
+        bindTabs(root, { repo, rerender: re, onSelect: id => { ui.id = id; re(); }, onAdd: () => addSetDialog(set, id => { ui.id = id; re(); }, re, ctx) });
+        root.querySelector('#psel').onchange = async e => { set.productSetId = e.target.value; await repo.save(set); re(); };
+        root.querySelector('#chk').onclick = () => problemsDialog(set, re);
+        root.querySelector('#ldd').onclick = () => openLoad(ctx, { only: 'dishes', after: re });
+        root.querySelector('#ldl').onclick = () => openLoad(ctx, { only: 'plan', after: re });
+        root.querySelector('#lda').onclick = () => openLoad(ctx, { after: re });
+        root.querySelector('#addd')?.addEventListener('click', () => dishDialog(set, { id: 'd' + Date.now().toString(36), meal: 'd', name: '', cook: 0, cond: ['any'], on: true, ing: [{ name: '', g: 80, min: 56, max: 120 }] }, re));
+        root.querySelectorAll('[data-on]').forEach(c => c.onchange = async () => { set.dishes.find(d => d.id === c.dataset.on).on = c.checked; await repo.save(set); re(); });
+        root.querySelectorAll('tr[data-d]').forEach(tr => tr.onclick = e => { if (e.target.tagName !== 'INPUT') dishDialog(set, set.dishes.find(d => d.id === tr.dataset.d), re); });
+        root.querySelector('#ren')?.addEventListener('click', async () => { const n = prompt('Название набора', set.name); if (n && n.trim()) { set.name = n.trim(); await repo.save(set); re(); } });
+        root.querySelector('#dup').onclick = async () => { const s = await repo.add({ ...JSON.parse(JSON.stringify(set)), id: repo.uid(), name: set.name + ' (копия)', builtin: false }); ui.id = s.id; re(); };
+        root.querySelector('#del').onclick = async () => { if (sets.length < 2) { alert('Последний набор удалить нельзя.'); return; } if (!confirm(`Удалить набор «${set.name}»?`)) return; await repo.remove(set.id); if (trip.menuSet === set.id) { trip.menuSet = repo.first().id; ctx.saveTrip(); } ui.id = repo.first().id; re(); };
+        root.querySelector('#exp').onclick = async () => download(`Меню_${set.name}.xlsx`, await writeXlsx([{ name: 'Меню', rows: menuRows(set) }]));
+        root.querySelector('#tpl').onclick = async () => download('Шаблон_набора_меню.xlsx', await writeXlsx([{ name: 'Меню', rows: [MCOLS, ['Мой набор', 'Ужин', 'Гречка с тушёнкой', 'Гречка', 90, 63, 135, 'любой день', 20], ['Мой набор', 'Ужин', 'Гречка с тушёнкой', 'Тушёнка говяжья', 70, 49, 105, '', '']] }]));
+        root.querySelector('#use').onclick = () => { trip.menuSet = set.id; if (prepo.get(set.productSetId)) trip.productSet = set.productSetId; ctx.saveTrip(); re(); };
+      },
+    };
+  },
+};
+
+return {focusSet, MCOLS, menuRows, parseMenu, views};
+})();
+__m['simple.js'] = (() => {
+// Режим «Просто, на группу»: вместо списка участников — число человек и «средний участник».
+// Приложение создаёт n одинаковых виртуальных участников, поэтому меню, закупки и рюкзаки работают как раньше.
+const defaultSimple = () => ({ on: false, n: 12, weight: 70, height: 172, age: 35, veg: false, noEat: '', notes: '' });
+
+// d: { appetite, shareM, shareF } — значения по умолчанию из параметров. Пол чередуется (М, Ж, М, …) — средний состав.
+function virtualGroup(s, d) {
+  const n = Math.max(1, Math.min(60, Math.round(+s.n) || 1)), no = (s.noEat || '').trim();
+  return Array.from({ length: n }, (_, i) => {
+    const f = i % 2 === 1;
+    return { id: 'sim' + i, virtual: true, name: `Участник ${i + 1}`, sex: f ? 'F' : 'M', age: +s.age || 35, height: +s.height || 172, weight: +s.weight || 70, gear: null, appetite: d.appetite, share: f ? d.shareF : d.shareM, allergy: no, veg: !!s.veg, dislike: no };
+  });
+}
+
+// Дополняет сохранённый поход полями, которых в старых данных нет
+function ensureTrip(t) {
+  t.simple = { ...defaultSimple(), ...(t.simple || {}) };
+  t.food ||= {}; if (t.food.reservePct == null) t.food.reservePct = 0; if (t.food.reserveDays == null) t.food.reserveDays = 1; t.reserveItem ||= {};
+  t.buyers ||= []; t.buyDept ||= {}; t.buyItem ||= {};
+  t.prefs ||= {}; if (!('kcalGoal' in t.prefs)) t.prefs.kcalGoal = null; if (t.prefs.restPct == null) t.prefs.restPct = 80;
+  return t;
+}
+
+// Включает/выключает простой режим. При включении подробная группа запоминается и возвращается при выключении.
+function setSimpleMode(t, on, d) {
+  ensureTrip(t);
+  if (on) {
+    if (t.group.length && !t.group.every(p => p.virtual)) t.detailedGroup = t.group;
+    t.simple.on = true; t.group = virtualGroup(t.simple, d);
+  } else {
+    t.simple.on = false;
+    if (t.detailedGroup) { t.group = t.detailedGroup; delete t.detailedGroup; }
+  }
+  return t;
+}
+const rebuildSimple = (t, d) => { if (t.simple.on) t.group = virtualGroup(t.simple, d); return t; };
+
+return {defaultSimple, virtualGroup, ensureTrip, setSimpleMode, rebuildSimple};
+})();
+__m['trip.js'] = (() => {
+// Экран «Поход»: общий блок, группа, вкладка «Вручную». Данные хранятся в одном объекте trip.
+const {COVERS, DAY_TYPES, CATEGORIES} = __m['defaults.js'];
+const {getParam} = __m['params.js'];
+const {form, bindForm, esc} = __m['ui.js'];
+const {repo: prepo} = __m['pstore.js'];
+const {repo: mrepo} = __m['mstore.js'];
+const {daysSection, ensurePlan, rebuild} = __m['tripdays.js'];
+const store = __m['store.js'];
+const {focusSet: focusProducts} = __m['productsview.js'];
+const {focusSet: focusMenu} = __m['menuview.js'];
+const {defaultSimple, ensureTrip, setSimpleMode, rebuildSimple} = __m['simple.js'];
+const {TYPES, defaultMeals, mealsOf, shareSum, moveSlot, removeSlot, addSlot, slotLabel} = __m['meals.js'];
+
+const newTrip = () => ({
+  name: '', start: '', end: '', kind: 'mountain', category: CATEGORIES[0],
+  days: [], group: [], drops: [],
+  gear: { common: null, maxM: null, maxF: null },
+  food: { hot: '2', lunchHot: false },
+  prefs: { mode: 'std', custom: null, breakfast: 'milk', sugar: 'common', snacks: 'common', treat: false, budget: null, likes: '', dislikes: '', kcalGoal: null, restPct: 80 },
+  simple: defaultSimple(),
+});
+
+let trip;
+const loadTrip = async () => { trip = ensureTrip((await store.get('trips', 'current')) || newTrip()); return trip; };
+const splitP = () => ({ split_b: getParam('split_b'), split_l: getParam('split_l'), split_d: getParam('split_d'), split_s: getParam('split_s') });
+const simpleDefs = () => ({ appetite: getParam('appetite_def'), shareM: getParam('share_m'), shareF: getParam('share_f') });
+const save = () => store.put('trips', 'current', trip);
+const getTrip = () => trip;
+const saveTrip = save;
+const setTrip = t => { trip = ensureTrip(t); save(); };
+const back = (to, label) => `<button class="back" data-go="${to}">‹ ${label}</button>`;
+const SEX = [['M', 'М'], ['F', 'Ж']];
+const KG = 'кг';
+
+const F = {
+  trip: [
+    { k: 'name', label: 'Название' },
+    { k: 'kind', label: 'Вид', type: 'seg', opts: [['hike', 'Пеший'], ['mountain', 'Горный'], ['ski', 'Лыжный'], ['water', 'Водный']] },
+    { k: 'category', label: 'Категория', type: 'select', opts: CATEGORIES.map(c => [c, c]) },
+  ],
+  person: [
+    { k: 'name', label: 'Имя' }, { k: 'sex', label: 'Пол', type: 'seg', opts: SEX },
+    { k: 'age', label: 'Возраст', type: 'number', unit: 'лет' }, { k: 'height', label: 'Рост', type: 'number', unit: 'см' },
+    { k: 'weight', label: 'Вес', type: 'number', unit: KG }, { k: 'gear', label: 'Личное снаряжение', type: 'number', unit: KG },
+    { k: 'appetite', label: 'Коэффициент аппетита', type: 'number', help: 'Насколько человек ест больше или меньше обычного. 1.0 — как все, 1.2 — ест на пятую часть больше, 0.9 — меньше. Умножает его потребность в калориях, поэтому влияет на порции в раскладке. Если не знаешь, оставь 1.0; после похода приложение подскажет поправку.' },
+    { k: 'share', label: 'Доля общего груза', type: 'number', help: 'Какую часть общего груза (продукты, палатки, котлы, горелки) несёт человек. 1.0 — как остальные, меньше — несёт меньше, например 0.7. По этим долям на этапе «Покупки» считаются рюкзаки. Личное снаряжение сюда не входит, оно вводится отдельно.' },
+    { k: 'allergy', label: 'Аллергии' }, { k: 'veg', label: 'Вегетарианец', type: 'check' }, { k: 'dislike', label: 'Не ест' },
+  ],
+  simple: [
+    { k: 'n', label: 'Человек в группе', type: 'number' },
+    { k: 'weight', label: 'Средний вес', type: 'number', unit: KG }, { k: 'height', label: 'Средний рост', type: 'number', unit: 'см' }, { k: 'age', label: 'Средний возраст', type: 'number', unit: 'лет' },
+    { k: 'veg', label: 'Есть вегетарианцы', type: 'check', help: 'Тогда мясные продукты в меню не используются: меню одно на всю группу.' },
+    { k: 'noEat', label: 'Не едят / аллергии', help: 'Через запятую, например: орехи, грибы. Эти продукты в меню не попадут.' },
+    { k: 'notes', label: 'Заметки о предпочтениях', help: 'Свободный текст, например: «1 чел — без глютена, 2 чел — не ест рыбу». Программа его не разбирает: заметки попадут в сводку и в информацию закупщикам.' },
+  ],
+  goal: [
+    { k: 'kcalGoal', label: 'Цель по калориям', type: 'number', unit: 'ккал/чел/день', help: 'Если задана, она заменяет расчёт по нагрузке: каждый день цель одна и та же. Пусто — считать по нагрузке и режиму раскладки.' },
+    { k: 'restPct', label: 'Днёвка', type: 'number', unit: '% от цели', show: p => p.kcalGoal > 0 },
+  ],
+  gear: [
+    { k: 'common', label: 'Общественное снаряжение', type: 'number', unit: KG },
+    { k: 'maxM', label: 'Макс. рюкзак М', type: 'number', unit: KG }, { k: 'maxF', label: 'Макс. рюкзак Ж', type: 'number', unit: KG },
+  ],
+  food: [
+    { k: 'hot', label: 'Горячих приёмов в день', type: 'seg', opts: [['2', '2'], ['3', '3']] },
+    { k: 'lunchHot', label: 'Обед горячий (иначе перекус)', type: 'check' },
+    { k: 'reservePct', label: 'Резерв продуктов', type: 'number', unit: '% от количества', help: 'Сколько добавить к закупке каждого продукта сверх меню: любое число, 0 — без резерва. Для отдельного продукта своё значение задаётся в «Покупки» → «Список». Меню и калории от резерва не меняются.' },
+    { k: 'reserveDays', label: 'Аварийный запас', type: 'number', unit: 'дн', help: 'Калорийные продукты (орехи, шоколад, халва…) на столько дней сверх меню. 0 — без аварийного запаса.' },
+  ],
+  prefs: [
+    { k: 'mode', label: 'Режим раскладки', type: 'seg', opts: [['hungry', 'Голодная'], ['std', 'Стандарт'], ['full', 'Сытая'], ['custom', 'Своя']] },
+    { k: 'custom', label: 'Своё покрытие', type: 'number', unit: '%', show: p => p.mode === 'custom' },
+    { k: 'breakfast', label: 'Завтраки', type: 'seg', opts: [['milk', 'Молочные'], ['meat', 'Мясные']] },
+    { k: 'sugar', label: 'Сахар', type: 'seg', opts: [['common', 'В раскладке'], ['personal', 'В личке']] },
+    { k: 'snacks', label: 'Перекусы на ходу', type: 'seg', opts: [['common', 'В раскладке'], ['personal', 'В личке']] },
+    { k: 'lunchSplit', label: 'Обед весь день (пакетов)', type: 'seg', opts: [['1', '1'], ['2', '2'], ['3', '3']], help: 'Обед-перекус делится на 2–3 пакета (около 11:00, 13:30 и 16:00): в горах едят часто и понемногу.' },
+    { k: 'budget', label: 'Бюджет (необязательно)', type: 'number' },
+    { k: 'likes', label: 'Любимые блюда' }, { k: 'dislikes', label: 'Нелюбимые блюда' },
+  ],
+  drop: [
+    { k: 'after', label: 'После дня №', type: 'number' }, { k: 'what', label: 'Что в заброске' },
+  ],
+};
+
+const bound = (ctx, fields, obj, after) => root => bindForm(root, fields, obj, () => save(), () => { after?.(); ctx.rerender(); });
+const newPerson = () => ({ id: crypto.randomUUID(), name: '', sex: 'M', age: null, height: null, weight: null, gear: null, appetite: getParam('appetite_def'), share: getParam('share_m'), allergy: '', veg: false, dislike: '' });
+// Пункт, который раскрывается и донастраивается: название, краткое значение и кнопка «Настроить» (нажимается вся строка)
+const link = (v, t, s) => `<li><button data-go="${v}"><span>${t}</span><span class="muted lval">${s}</span><span class="cfgbtn">Настроить</span></button></li>`;
+
+const views = {
+  main(_, ctx) {
+    ensurePlan(trip);
+    const ds = daysSection(trip, save, ctx);
+    return {
+      html: `<h2>Поход</h2>
+        <div class="cols2"><div><div id="tf">${form(F.trip, trip)}</div>
+        <div class="fld"><label>Набор продуктов</label><div class="ctl"><select id="sp">${prepo.list().map(s => `<option value="${s.id}"${s.id === trip.productSet ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select><button class="cfgbtn" id="cfgp">Настроить</button></div></div>
+        <div class="fld"><label>Набор меню</label><div class="ctl"><select id="sm">${mrepo.list().map(s => `<option value="${s.id}"${s.id === trip.menuSet ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select><button class="cfgbtn" id="cfgm">Настроить</button></div></div>
+        <ul class="list">${link('group', 'Группа', `${trip.group.length} чел`)}${link('gear', 'Снаряжение', trip.gear.common ? trip.gear.common + ' кг' : '—')}
+        ${link('food', 'Питание и заброски', `${trip.food.hot} горячих`)}${link('prefs', 'Предпочтения', '')}</ul></div>
+        <div></div></div>${ds.html}`,
+      bind(root) {
+        bindForm(root.querySelector('#tf'), F.trip, trip, () => save(), () => ctx.rerender()); ds.bind(root);
+        root.querySelector('#cfgp').onclick = () => { focusProducts(trip.productSet || prepo.first()?.id); ctx.state.tab = 'products'; ctx.go(''); };
+        root.querySelector('#cfgm').onclick = () => { focusMenu(trip.menuSet || mrepo.first()?.id); ctx.state.tab = 'menus'; ctx.go(''); };
+        root.querySelector('#sp').onchange = e => { trip.productSet = e.target.value; const m = mrepo.list().find(x => x.productSetId === e.target.value); if (m && mrepo.get(trip.menuSet)?.productSetId !== e.target.value) trip.menuSet = m.id; save(); ctx.rerender(); };
+        root.querySelector('#sm').onchange = e => { trip.menuSet = e.target.value; const m = mrepo.get(e.target.value); if (m && prepo.get(m.productSetId)) trip.productSet = m.productSetId; save(); ctx.rerender(); };
+      },
+    };
+  },
+
+  group(_, ctx) {
+    const on = trip.simple.on;
+    const mode = `<div class="fld"><label>Как считаем</label><div class="ctl"><div class="seg"><button data-gmode="0" class="${on ? '' : 'on'}">Подробно, по участникам</button><button data-gmode="1" class="${on ? 'on' : ''}">Просто, на группу</button></div></div></div>`;
+    const goal = `<h3>Цель по калориям</h3><div id="goalf">${form(F.goal, trip.prefs)}</div>`;
+    return {
+      html: `${back('', 'Поход')}<h2>Группа</h2>${mode}
+        ${on ? `<p class="muted">Расчёт усреднённый: все участники одинаковые, пол чередуется. Чтобы учесть каждого, переключите на «Подробно».</p><div id="simplef">${form(F.simple, trip.simple)}</div>`
+          : `${trip.group.length ? `<ul class="list">${trip.group.map((p, i) => `<li><button data-go="person" data-arg="${i}"><span>${esc(p.name) || 'Без имени'} · ${p.sex === 'F' ? 'Ж' : 'М'}${p.age ? ' · ' + p.age : ''}</span><span class="muted">${p.weight ? p.weight + ' кг' : ''} ›</span></button></li>`).join('')}</ul>` : '<p class="empty">Участников пока нет.</p>'}
+        <button class="btn" id="add">Добавить участника</button>`}
+        ${goal}`,
+      bind(root) {
+        root.querySelectorAll('[data-gmode]').forEach(b => b.onclick = () => { setSimpleMode(trip, b.dataset.gmode === '1', simpleDefs()); save(); ctx.rerender(); });
+        if (on) bindForm(root.querySelector('#simplef'), F.simple, trip.simple, () => { rebuildSimple(trip, simpleDefs()); save(); }, () => ctx.rerender());
+        else root.querySelector('#add').onclick = () => { trip.group.push(newPerson()); save(); ctx.go('person', trip.group.length - 1); };
+        bindForm(root.querySelector('#goalf'), F.goal, trip.prefs, k => { save(); if (k === 'kcalGoal') ctx.rerender(); }, () => ctx.rerender());
+      },
+    };
+  },
+
+  person(i, ctx) {
+    const p = trip.group[i];
+    const prevSex = p.sex;
+    return {
+      html: `${back('group', 'Группа')}<h2>Участник</h2>${form(F.person, p)}<button class="btn danger" id="del">Удалить участника</button>`,
+      bind(root) {
+        bindForm(root, F.person, p, k => {
+          if (k === 'sex' && p.share === getParam(prevSex === 'F' ? 'share_f' : 'share_m')) p.share = getParam(p.sex === 'F' ? 'share_f' : 'share_m');
+          save();
+        }, () => ctx.rerender());
+        root.querySelector('#del').onclick = () => { trip.group.splice(i, 1); save(); ctx.go('group'); };
+      },
+    };
+  },
+
+  gear: (_, ctx) => ({ html: `${back('', 'Поход')}<h2>Снаряжение</h2>${form(F.gear, trip.gear)}`, bind: bound(ctx, F.gear, trip.gear) }),
+  prefs: (_, ctx) => ({ html: `${back('', 'Поход')}<h2>Предпочтения</h2>${form(F.prefs, trip.prefs)}`, bind: bound(ctx, F.prefs, trip.prefs) }),
+
+  food(_, ctx) {
+    const slots = mealsOf(trip, splitP()), sum = shareSum(slots);
+    const mealsHtml = `<h3>Приёмы пищи в день</h3><p class="muted small">Добавляйте приёмы и меняйте их порядок. Доля — часть дневных калорий. «Перекус» подбирается из сладкого и орехов набора, если в наборе нет блюд-перекусов.</p>
+      ${slots.map((s, i) => `<div class="mealrow"><b>${i + 1}</b> <select data-mt="${i}">${TYPES.map(([k, n]) => `<option value="${k}"${k === s.type ? ' selected' : ''}>${n}</option>`).join('')}</select> <input data-mn="${i}" placeholder="${esc(slotLabel(slots, s.id))}" value="${esc(s.name || '')}" style="width:130px"> <input data-ms="${i}" type="number" min="0" max="100" value="${s.share}" style="width:60px">% <button class="mini" data-mu="${i}">▲</button><button class="mini" data-mdn="${i}">▼</button><button class="mini" data-mx="${i}">✕</button></div>`).join('')}
+      <p class="${sum === 100 ? 'good' : 'warnmsg'}">Сумма долей: ${sum}%${sum === 100 ? '' : ' — должна быть 100%'}</p>
+      <div class="btnrow"><button class="btn" id="addmeal">Добавить приём</button><button class="btn ghost" id="resetmeals">Стандартный план</button></div>`;
+    return {
+      html: `${back('', 'Поход')}<h2>Питание и заброски</h2>${mealsHtml}<div id="foodf">${form(F.food, trip.food)}</div>
+        <h3>Заброски</h3>
+        ${trip.drops.map((d, i) => `<div class="drop">${form(F.drop, d)}<button class="mini" data-deldrop="${i}">Удалить</button></div>`).join('') || '<p class="empty">Заброски не заданы.</p>'}
+        <button class="btn" id="adddrop">Добавить заброску</button>`,
+      bind(root) {
+        bound(ctx, F.food, trip.food)(root.querySelector('#foodf'));
+        const edit = fn => { trip.meals = fn(slots.map(s => ({ ...s }))); save(); ctx.rerender(); };
+        root.querySelectorAll('[data-mt]').forEach(el => el.onchange = () => edit(a => { a[+el.dataset.mt].type = el.value; return a; }));
+        root.querySelectorAll('[data-mn]').forEach(el => el.onchange = () => edit(a => { a[+el.dataset.mn].name = el.value.trim() || undefined; return a; }));
+        root.querySelectorAll('[data-ms]').forEach(el => el.onchange = () => edit(a => { a[+el.dataset.ms].share = Math.max(0, Math.min(100, +el.value || 0)); return a; }));
+        root.querySelectorAll('[data-mu]').forEach(el => el.onclick = () => edit(a => moveSlot(a, +el.dataset.mu, -1)));
+        root.querySelectorAll('[data-mdn]').forEach(el => el.onclick = () => edit(a => moveSlot(a, +el.dataset.mdn, 1)));
+        root.querySelectorAll('[data-mx]').forEach(el => el.onclick = () => edit(a => removeSlot(a, +el.dataset.mx)));
+        root.querySelector('#addmeal').onclick = () => edit(a => addSlot(a));
+        root.querySelector('#resetmeals').onclick = () => { delete trip.meals; save(); ctx.rerender(); };
+        root.querySelectorAll('.drop').forEach((el, i) => bindForm(el, F.drop, trip.drops[i], save, () => ctx.rerender()));
+        root.querySelector('#adddrop').onclick = () => { trip.drops.push({ after: null, what: '' }); save(); ctx.rerender(); };
+        root.querySelectorAll('[data-deldrop]').forEach(b => b.onclick = () => { trip.drops.splice(+b.dataset.deldrop, 1); save(); ctx.rerender(); });
+      },
+    };
+  },
+};
+
+return {newTrip, loadTrip, getTrip, saveTrip, setTrip, views};
 })();
 __m['plan.js'] = (() => {
 // Меню-план: какие блюда стоят в ячейках «день × приём пищи». План «оригинал» применяется без генерации и масштабирования.
@@ -3040,171 +3212,6 @@ const views = {
 };
 
 return {views};
-})();
-__m['menuview.js'] = (() => {
-// Экран «Меню»: вкладки-наборы меню, список блюд по приёмам пищи, редактор блюда, проверка продуктов, импорт и шаблон.
-const {repo, MEAL_NAMES, COND} = __m['mstore.js'];
-const {repo: prepo} = __m['pstore.js'];
-const {menuProblems, altNames} = __m['menu.js'];
-const {tabsHtml, bindTabs} = __m['tabsui.js'];
-const {readTable, writeXlsx, download} = __m['xlsx.js'];
-const {esc, modal} = __m['ui.js'];
-const {openLoad} = __m['loadview.js'];
-
-const ui = { id: null };
-const MCOLS = ['Набор', 'Приём пищи', 'Блюдо', 'Продукт', 'Г_на_чел', 'Мин_г', 'Макс_г', 'Условия', 'Варка_мин'];
-const MEAL_KEY = { завтрак: 'b', обед: 'l', ужин: 'd', перекус: 's', карпит: 's' };
-const norm = s => String(s ?? '').toLowerCase().replace(/[\s_]/g, '');
-const condName = k => (COND.find(c => c[0] === k) || [, k])[1];
-const condKey = t => { const x = String(t).trim().toLowerCase(); return (COND.find(c => c[1] === x || c[0] === x) || (x.includes('3000') ? ['alt3000'] : x.startsWith('перв') ? ['first2'] : []))[0]; };
-
-function menuRows(set) {
-  const rows = [MCOLS];
-  set.dishes.forEach(d => d.ing.forEach((i, k) => rows.push([set.name, MEAL_NAMES[d.meal], d.name, i.name, i.g, i.min ?? '', i.max ?? '', k === 0 ? (d.cond || []).map(condName).join(', ') : '', k === 0 ? d.cook ?? '' : ''])));
-  return rows;
-}
-
-// Файл → наборы меню; errors построчно
-function parseMenu(rows) {
-  const hdr = (rows[0] || []).map(norm), at = n => hdr.indexOf(norm(n)), errors = [], sets = new Map(), dishes = new Map();
-  for (const n of ['Приём пищи', 'Блюдо', 'Продукт', 'Г_на_чел']) if (at(n) < 0) errors.push(`нет колонки «${n}»`);
-  if (errors.length) return { sets: [], errors };
-  rows.slice(1).forEach((r, i) => {
-    const ln = i + 2, g = n => (at(n) >= 0 ? r[at(n)] : ''), num = n => { const v = g(n); return v === '' || v == null ? null : +String(v).replace(',', '.'); };
-    if (!r.some(v => v !== '' && v != null)) return;
-    const mk = MEAL_KEY[String(g('Приём пищи')).trim().toLowerCase()]; if (!mk) { errors.push(`строка ${ln}: неизвестный приём пищи «${g('Приём пищи')}»`); return; }
-    const dn = String(g('Блюдо') ?? '').trim(); if (!dn) { errors.push(`строка ${ln}: нет названия блюда`); return; }
-    const pn = String(g('Продукт') ?? '').trim(); if (!pn) { errors.push(`строка ${ln}: нет продукта`); return; }
-    const gr = num('Г_на_чел'); if (gr == null || isNaN(gr) || gr <= 0) { errors.push(`строка ${ln}: нет граммов на человека`); return; }
-    const sn = String(g('Набор') || 'Из файла').trim(), key = sn + '|' + mk + '|' + dn;
-    if (!sets.has(sn)) sets.set(sn, { name: sn, dishes: [] });
-    let d = dishes.get(key);
-    if (!d) { d = { id: 'd' + dishes.size + Date.now().toString(36), meal: mk, name: dn, cook: num('Варка_мин') || 0, cond: [], on: true, ing: [] }; dishes.set(key, d); sets.get(sn).dishes.push(d); }
-    const cs = String(g('Условия') || '').split(/[,;]/).map(condKey).filter(Boolean); if (cs.length) d.cond = [...new Set([...d.cond, ...cs])];
-    d.ing.push({ name: pn, g: gr, min: num('Мин_г') ?? Math.round(gr * .7), max: num('Макс_г') ?? Math.round(gr * 1.5) });
-  });
-  dishes.forEach(d => { if (!d.cond.length) d.cond = ['any']; });
-  return { sets: [...sets.values()], errors };
-}
-
-function dishDialog(set, dish, done) {
-  if (set.readonly) return;
-  const isNew = !set.dishes.includes(dish), names = (prepo.get(set.productSetId) || prepo.first()).items.map(p => p.name);
-  modal(() => ({
-    title: isNew ? 'Новое блюдо' : dish.name,
-    html: `<datalist id="pn">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
-      <div class="fld"><label>Название</label><div class="ctl"><input data-f="name" value="${esc(dish.name)}" style="width:240px;text-align:left"></div></div>
-      <div class="fld"><label>Приём пищи</label><div class="ctl"><select data-f="meal">${Object.entries(MEAL_NAMES).map(([k, n]) => `<option value="${k}"${dish.meal === k ? ' selected' : ''}>${n}</option>`).join('')}</select></div></div>
-      <div class="fld"><label>Время варки</label><div class="ctl"><input type="number" data-f="cook" value="${dish.cook ?? 0}"><span class="muted unit">мин</span></div></div>
-      <div class="fld"><label>Включено</label><div class="ctl"><input type="checkbox" data-f="on" ${dish.on ? 'checked' : ''}></div></div>
-      <h3>Условия применения</h3><div class="chips">${COND.map(([k, n]) => `<button data-c="${k}" class="${(dish.cond || []).includes(k) ? 'on' : ''}">${n}</button>`).join('')}</div>
-      <p class="muted small">Блюдо подходит, если выполняется любое отмеченное условие.</p>
-      <h3>Продукты, г на человека</h3><div class="tbl"><table class="dtable"><tr><th>Продукт (можно «А|Б»)</th><th>База</th><th>Мин</th><th>Макс</th><th></th></tr>
-      ${dish.ing.map((i, k) => `<tr><td><input list="pn" data-i="${k}:name" value="${esc(i.name)}" style="width:230px"></td><td><input type="number" data-i="${k}:g" value="${i.g}" style="width:64px"></td><td><input type="number" data-i="${k}:min" value="${i.min ?? ''}" style="width:64px"></td><td><input type="number" data-i="${k}:max" value="${i.max ?? ''}" style="width:64px"></td><td><button class="mini" data-x="${k}">×</button></td></tr>`).join('')}</table></div>
-      <button class="mini" id="addi">+ Продукт</button>
-      <div class="btnrow"><button class="btn" id="sv">Сохранить</button>${isNew ? '' : '<button class="btn danger" id="del">Удалить блюдо</button>'}<button class="btn ghost" id="cn">Закрыть</button></div>`,
-    bind(root, refresh, close) {
-      root.querySelectorAll('[data-f]').forEach(el => el.onchange = () => { const k = el.dataset.f; dish[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? +el.value : el.value; });
-      root.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { const k = b.dataset.c; const c = new Set(dish.cond || []); if (k === 'any') { c.clear(); c.add('any'); } else { c.delete('any'); c.has(k) ? c.delete(k) : c.add(k); } dish.cond = c.size ? [...c] : ['any']; refresh(); });
-      root.querySelectorAll('[data-i]').forEach(el => el.onchange = () => { const [k, f] = el.dataset.i.split(':'); const v = f === 'name' ? el.value : (el.value === '' ? null : +el.value); dish.ing[+k][f] = v; });
-      root.querySelectorAll('[data-x]').forEach(b => b.onclick = () => { dish.ing.splice(+b.dataset.x, 1); refresh(); });
-      root.querySelector('#addi').onclick = () => { dish.ing.push({ name: '', g: 50, min: 35, max: 75 }); refresh(); };
-      root.querySelector('#sv').onclick = async () => { if (!dish.name.trim()) return; dish.ing = dish.ing.filter(i => i.name.trim() && i.g > 0); if (isNew) set.dishes.push(dish); await repo.save(set); close(); done(); };
-      root.querySelector('#del')?.addEventListener('click', async () => { set.dishes = set.dishes.filter(d => d !== dish); await repo.save(set); close(); done(); });
-      root.querySelector('#cn').onclick = close;
-    },
-  }));
-}
-
-function problemsDialog(set, done) {
-  modal(() => {
-    const pset = prepo.get(set.productSetId) || prepo.first(), pr = menuProblems(set, pset), all = pset.items;
-    return {
-      title: `Проверка: «${set.name}» и набор продуктов «${pset.name}»`,
-      html: pr.length ? `<p class="muted">Этих продуктов нет в наборе продуктов или они не выбраны. Включите продукт или замените его в блюде.</p>
-        <div class="tbl"><table class="dtable"><tr><th>Блюдо</th><th>Продукт</th><th>Действие</th></tr>${pr.map((p, k) => `<tr><td>${esc(p.dish.name)}</td><td>${esc(p.ing.name)}</td><td>${p.alts.filter(a => a.state === 'off').map(a => `<button class="mini" data-on="${a.id}">Включить «${esc(all.find(x => x.id === a.id)?.name)}»</button>`).join(' ')}<select data-rep="${k}"><option value="">Заменить на…</option>${all.filter(x => x.on).map(x => `<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('')}</select></td></tr>`).join('')}</table></div>` : '<p class="good"><b>Проблем нет:</b> все продукты блюд есть в наборе и выбраны.</p>',
-      bind(root, refresh) {
-        root.querySelectorAll('[data-on]').forEach(b => b.onclick = async () => { const p = all.find(x => x.id === b.dataset.on); p.on = true; await prepo.save(pset); done(); refresh(); });
-        root.querySelectorAll('[data-rep]').forEach(s => s.onchange = async () => { if (!s.value) return; pr[+s.dataset.rep].ing.name = s.value; await repo.save(set); done(); refresh(); });
-      },
-    };
-  });
-}
-
-function importDialog(done) {
-  let res = null, err = '';
-  modal(() => ({
-    title: 'Набор меню из файла',
-    html: `<p class="muted">Файл .xlsx, .csv или .json, колонки: ${MCOLS.join('; ')}. Одна строка — один продукт блюда. Условия через запятую: ${COND.map(c => c[1]).join(', ')}.</p>
-      <div class="btnrow"><label class="btn ghost filebtn">Выбрать файл<input type="file" id="f" accept=".xlsx,.csv,.json" hidden></label><button class="btn ghost" id="tpl">Скачать шаблон</button></div><p class="warnmsg">${esc(err)}</p>
-      ${res ? `<h3>Предпросмотр: наборов ${res.sets.length}, блюд ${res.sets.reduce((s, x) => s + x.dishes.length, 0)}${res.errors.length ? `, ошибок ${res.errors.length}` : ''}</h3>
-        ${res.errors.length ? `<ul class="warnlist">${res.errors.slice(0, 30).map(e => `<li>${esc(e)}</li>`).join('')}</ul><p class="muted small">Строки с ошибками не загрузятся.</p>` : ''}
-        <ul class="list">${res.sets.map(s => `<li><span>${esc(s.name)}</span><span class="muted">${s.dishes.length} блюд</span></li>`).join('')}</ul>
-        <div class="btnrow"><button class="btn" id="load" ${res.sets.length ? '' : 'disabled'}>Загрузить</button></div>` : ''}`,
-    bind(root, refresh, close) {
-      root.querySelector('#tpl').onclick = async () => download('Шаблон_набора_меню.xlsx', await writeXlsx([{ name: 'Меню', rows: [MCOLS, ['Мой набор', 'Ужин', 'Гречка с тушёнкой', 'Гречка', 90, 63, 135, 'любой день', 20], ['Мой набор', 'Ужин', 'Гречка с тушёнкой', 'Тушёнка говяжья', 70, 49, 105, '', ''], ['Мой набор', 'Обед', 'Горячий обед', 'Суп в пакете', 25, 18, 38, 'днёвка, холод', 10]] }]));
-      root.querySelector('#f').onchange = async e => { const f = e.target.files[0]; if (!f) return; err = ''; try { res = parseMenu(await readTable(f)); } catch (x) { err = x.message; res = null; } refresh(); };
-      root.querySelector('#load')?.addEventListener('click', async () => {
-        let last = null;
-        for (const s of res.sets) { if (!repo.canAdd()) { alert('Достигнут максимум 10 наборов меню.'); break; } last = await repo.add({ id: repo.uid(), name: s.name, productSetId: prepo.first().id, dishes: s.dishes }); }
-        close(); if (last) done(last.id);
-      });
-    },
-  }));
-}
-
-function addSetDialog(cur, done, rerender) {
-  modal(() => ({
-    title: 'Новый набор меню',
-    html: `<ul class="list"><li><button data-k="empty">Пустой набор<span>›</span></button></li><li><button data-k="copy">Копия текущего («${esc(cur.name)}»)<span>›</span></button></li><li><button data-k="file">Из файла (.xlsx, .csv, .json)<span>›</span></button></li><li><button data-k="manual">Вручную, по одному блюду<span>›</span></button></li></ul>`,
-    bind(root, refresh, close) {
-      root.querySelectorAll('[data-k]').forEach(b => b.onclick = async () => {
-        const k = b.dataset.k; close();
-        if (k === 'file') return importDialog(done);
-        const name = prompt('Название набора', k === 'copy' ? cur.name + ' (копия)' : 'Новый набор'); if (!name) return;
-        const s = await repo.add({ id: repo.uid(), name: name.trim(), productSetId: cur.productSetId, dishes: k === 'copy' ? JSON.parse(JSON.stringify(cur.dishes)) : [] });
-        done(s.id); if (k === 'manual') setTimeout(() => dishDialog(s, { id: 'd' + Date.now().toString(36), meal: 'd', name: '', cook: 0, cond: ['any'], on: true, ing: [{ name: '', g: 80, min: 56, max: 120 }] }, rerender), 50);
-      });
-    },
-  }));
-}
-
-const views = {
-  menus(_, ctx) {
-    const trip = ctx.trip(), sets = repo.list();
-    if (!repo.get(ui.id)) ui.id = (repo.get(trip.menuSet) || repo.first()).id;
-    const set = repo.get(ui.id), pset = prepo.get(set.productSetId) || prepo.first(), pr = menuProblems(set, pset);
-    return {
-      html: `<h2>Меню</h2>${tabsHtml(sets, set.id, trip.menuSet)}
-        <div class="btnrow">${set.readonly ? '' : '<button class="mini" id="ren">Переименовать</button>'}<button class="mini" id="dup" ${repo.canAdd() ? '' : 'disabled'}>Дублировать</button><button class="mini" id="del">Удалить</button><button class="mini" id="exp">В файл</button><button class="mini" id="tpl">Скачать шаблон</button><button class="mini" id="use">${set.id === trip.menuSet ? 'Используется в походе ✓' : 'Использовать в походе'}</button></div>
-        <div class="fld"><label>Набор продуктов для этого меню</label><div class="ctl"><select id="psel">${prepo.list().map(s => `<option value="${s.id}"${s.id === pset.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></div></div>
-        <div class="btnrow"><button class="btn ${pr.length ? '' : 'ghost'}" id="chk">Проверка продуктов${pr.length ? ` · проблем: ${pr.length}` : ' · ок'}</button>${set.readonly ? '' : '<button class="btn" id="addd" style="margin-left:auto">Добавить блюдо</button>'}</div>
-        <div class="btnrow"><button class="btn ghost" id="ldd">Загрузить блюда</button><button class="btn ghost" id="ldl">Загрузить меню (план)</button><button class="btn ghost" id="lda">Загрузить всё из файла</button>${set.readonly ? '<span class="muted small">🔒 Оригинал, только чтение: скопируйте набор («Дублировать»), чтобы менять.</span>' : ''}</div>
-        ${pr.length ? `<p class="warnmsg small">В меню есть продукты, которых нет в наборе «${esc(pset.name)}» или они выключены. Нажмите «Проверка продуктов».</p>` : ''}
-        ${[...Object.entries(MEAL_NAMES), ['', 'Без приёма пищи (его задаёт план)']].filter(([m]) => m || set.dishes.some(d => !d.meal)).map(([m, n]) => { const ds = set.dishes.filter(d => (d.meal || '') === m); return `<h3>${n} · ${ds.length}</h3>${ds.length ? `<div class="tbl"><table class="dtable"><tr><th></th><th>Блюдо</th><th>Состав, г на человека</th><th>Условия</th><th>Варка</th></tr>${ds.map(d => `<tr data-d="${d.id}" class="${d.on ? '' : 'off'}"><td><input type="checkbox" data-on="${d.id}" ${d.on ? 'checked' : ''}${set.readonly ? ' disabled' : ''}></td><td>${esc(d.name)}</td><td class="muted small" style="white-space:normal">${d.ing.map(i => `${esc(String(i.name).split('|')[0])} ${i.g}${i.unit && i.unit !== 'г' ? ' ' + esc(i.unit) : ''}`).join(', ')}</td><td>${(d.cond || []).map(condName).join(', ')}</td><td>${d.cook || 0} мин</td></tr>`).join('')}</table></div>` : '<p class="muted small">Блюд нет.</p>'}`; }).join('')}`,
-      bind(root) {
-        const re = () => ctx.rerender();
-        bindTabs(root, { repo, rerender: re, onSelect: id => { ui.id = id; re(); }, onAdd: () => addSetDialog(set, id => { ui.id = id; re(); }, re) });
-        root.querySelector('#psel').onchange = async e => { set.productSetId = e.target.value; await repo.save(set); re(); };
-        root.querySelector('#chk').onclick = () => problemsDialog(set, re);
-        root.querySelector('#ldd').onclick = () => openLoad(ctx, { only: 'dishes', after: re });
-        root.querySelector('#ldl').onclick = () => openLoad(ctx, { only: 'plan', after: re });
-        root.querySelector('#lda').onclick = () => openLoad(ctx, { after: re });
-        root.querySelector('#addd')?.addEventListener('click', () => dishDialog(set, { id: 'd' + Date.now().toString(36), meal: 'd', name: '', cook: 0, cond: ['any'], on: true, ing: [{ name: '', g: 80, min: 56, max: 120 }] }, re));
-        root.querySelectorAll('[data-on]').forEach(c => c.onchange = async () => { set.dishes.find(d => d.id === c.dataset.on).on = c.checked; await repo.save(set); re(); });
-        root.querySelectorAll('tr[data-d]').forEach(tr => tr.onclick = e => { if (e.target.tagName !== 'INPUT') dishDialog(set, set.dishes.find(d => d.id === tr.dataset.d), re); });
-        root.querySelector('#ren')?.addEventListener('click', async () => { const n = prompt('Название набора', set.name); if (n && n.trim()) { set.name = n.trim(); await repo.save(set); re(); } });
-        root.querySelector('#dup').onclick = async () => { const s = await repo.add({ ...JSON.parse(JSON.stringify(set)), id: repo.uid(), name: set.name + ' (копия)', builtin: false }); ui.id = s.id; re(); };
-        root.querySelector('#del').onclick = async () => { if (sets.length < 2) { alert('Последний набор удалить нельзя.'); return; } if (!confirm(`Удалить набор «${set.name}»?`)) return; await repo.remove(set.id); if (trip.menuSet === set.id) { trip.menuSet = repo.first().id; ctx.saveTrip(); } ui.id = repo.first().id; re(); };
-        root.querySelector('#exp').onclick = async () => download(`Меню_${set.name}.xlsx`, await writeXlsx([{ name: 'Меню', rows: menuRows(set) }]));
-        root.querySelector('#tpl').onclick = async () => download('Шаблон_набора_меню.xlsx', await writeXlsx([{ name: 'Меню', rows: [MCOLS, ['Мой набор', 'Ужин', 'Гречка с тушёнкой', 'Гречка', 90, 63, 135, 'любой день', 20], ['Мой набор', 'Ужин', 'Гречка с тушёнкой', 'Тушёнка говяжья', 70, 49, 105, '', '']] }]));
-        root.querySelector('#use').onclick = () => { trip.menuSet = set.id; if (prepo.get(set.productSetId)) trip.productSet = set.productSetId; ctx.saveTrip(); re(); };
-      },
-    };
-  },
-};
-
-return {MCOLS, menuRows, parseMenu, views};
 })();
 __m['method.js'] = (() => {
 // Справка по методологии. {id} подставляется текущим значением параметра и ведёт в его настройку.

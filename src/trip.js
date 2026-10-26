@@ -6,6 +6,8 @@ import { repo as prepo } from './pstore.js';
 import { repo as mrepo } from './mstore.js';
 import { daysSection, ensurePlan, rebuild } from './tripdays.js';
 import * as store from './store.js';
+import { focusSet as focusProducts } from './productsview.js';
+import { focusSet as focusMenu } from './menuview.js';
 import { defaultSimple, ensureTrip, setSimpleMode, rebuildSimple } from './simple.js';
 import { TYPES, defaultMeals, mealsOf, shareSum, moveSlot, removeSlot, addSlot, slotLabel } from './meals.js';
 
@@ -82,7 +84,8 @@ const F = {
 
 const bound = (ctx, fields, obj, after) => root => bindForm(root, fields, obj, () => save(), () => { after?.(); ctx.rerender(); });
 const newPerson = () => ({ id: crypto.randomUUID(), name: '', sex: 'M', age: null, height: null, weight: null, gear: null, appetite: getParam('appetite_def'), share: getParam('share_m'), allergy: '', veg: false, dislike: '' });
-const link = (v, t, s) => `<li><button data-go="${v}">${t}<span class="muted">${s} ›</span></button></li>`;
+// Пункт, который раскрывается и донастраивается: название, краткое значение и кнопка «Настроить» (нажимается вся строка)
+const link = (v, t, s) => `<li><button data-go="${v}"><span>${t}</span><span class="muted lval">${s}</span><span class="cfgbtn">Настроить</span></button></li>`;
 
 export const views = {
   main(_, ctx) {
@@ -91,13 +94,15 @@ export const views = {
     return {
       html: `<h2>Поход</h2>
         <div class="cols2"><div><div id="tf">${form(F.trip, trip)}</div>
-        <div class="fld"><label>Набор продуктов</label><div class="ctl"><select id="sp">${prepo.list().map(s => `<option value="${s.id}"${s.id === trip.productSet ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></div></div>
-        <div class="fld"><label>Набор меню</label><div class="ctl"><select id="sm">${mrepo.list().map(s => `<option value="${s.id}"${s.id === trip.menuSet ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></div></div>
+        <div class="fld"><label>Набор продуктов</label><div class="ctl"><select id="sp">${prepo.list().map(s => `<option value="${s.id}"${s.id === trip.productSet ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select><button class="cfgbtn" id="cfgp">Настроить</button></div></div>
+        <div class="fld"><label>Набор меню</label><div class="ctl"><select id="sm">${mrepo.list().map(s => `<option value="${s.id}"${s.id === trip.menuSet ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select><button class="cfgbtn" id="cfgm">Настроить</button></div></div>
         <ul class="list">${link('group', 'Группа', `${trip.group.length} чел`)}${link('gear', 'Снаряжение', trip.gear.common ? trip.gear.common + ' кг' : '—')}
         ${link('food', 'Питание и заброски', `${trip.food.hot} горячих`)}${link('prefs', 'Предпочтения', '')}</ul></div>
         <div></div></div>${ds.html}`,
       bind(root) {
         bindForm(root.querySelector('#tf'), F.trip, trip, () => save(), () => ctx.rerender()); ds.bind(root);
+        root.querySelector('#cfgp').onclick = () => { focusProducts(trip.productSet || prepo.first()?.id); ctx.state.tab = 'products'; ctx.go(''); };
+        root.querySelector('#cfgm').onclick = () => { focusMenu(trip.menuSet || mrepo.first()?.id); ctx.state.tab = 'menus'; ctx.go(''); };
         root.querySelector('#sp').onchange = e => { trip.productSet = e.target.value; const m = mrepo.list().find(x => x.productSetId === e.target.value); if (m && mrepo.get(trip.menuSet)?.productSetId !== e.target.value) trip.menuSet = m.id; save(); ctx.rerender(); };
         root.querySelector('#sm').onchange = e => { trip.menuSet = e.target.value; const m = mrepo.get(e.target.value); if (m && prepo.get(m.productSetId)) trip.productSet = m.productSetId; save(); ctx.rerender(); };
       },

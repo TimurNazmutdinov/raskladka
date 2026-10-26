@@ -7,6 +7,7 @@ import { form, bindForm, esc, modal } from './ui.js';
 import { openLoad } from './loadview.js';
 
 const ui = { id: null, cat: 'all', q: '' };
+export const focusSet = id => { ui.id = id; ui.cat = 'all'; }; // открыть вкладку «Продукты» на нужном наборе (кнопка «Настроить» в «Поход»)
 const catName = k => (CATS.find(c => c[0] === k) || [, k])[1];
 const PF = [
   { k: 'name', label: 'Название' }, { k: 'cat', label: 'Категория', type: 'select', opts: CATS },
@@ -160,7 +161,7 @@ export const views = {
         ${list.map(p => `<tr data-p="${p.id}"><td><input type="checkbox" data-on="${p.id}"${p.on ? ' checked' : ''}${set.readonly ? ' disabled' : ''}></td><td>${esc(p.name)}${p.check ? ' <span class="dot">?</span>' : ''}${p.kcal == null || (p.baseUnit && p.baseUnit !== 'г') ? ' <span class="bad small">не считается</span>' : ''}${p.fresh ? ' <span class="muted small">свежий</span>' : ''}</td><td>${esc(p.catOrig ?? catName(p.cat))}</td><td>${p.kcal ?? ''}</td><td>${p.p ?? ''}</td><td>${p.f ?? ''}</td><td>${p.c ?? ''}</td><td>${p.pack ?? ''}${p.baseUnit && p.baseUnit !== 'г' ? ` <span class="muted small">${esc(p.baseUnit)}</span>` : ''}</td><td>${p.shelf == null ? '' : p.shelf >= 999 ? '∞' : p.shelf}</td><td>${p.price ?? ''}</td></tr>`).join('') || '<tr><td colspan="10" class="muted">Ничего не найдено</td></tr>'}</table></div>`,
       bind(root) {
         const re = () => ctx.rerender();
-        bindTabs(root, { repo, rerender: re, onSelect: id => { ui.id = id; ui.cat = 'all'; re(); }, onAdd: () => addSetDialog(set, id => { ui.id = id; re(); }, re) });
+        bindTabs(root, { repo, rerender: re, onSelect: id => { ui.id = id; ui.cat = 'all'; re(); }, onAdd: () => addSetDialog(set, id => { ui.id = id; re(); }, re, ctx) });
         const q2 = root.querySelector('#q'); q2.oninput = () => { ui.q = q2.value; const pos = q2.selectionStart; re(); const n = document.querySelector('#q'); n.focus(); n.setSelectionRange(pos, pos); };
         root.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { ui.cat = b.dataset.c; re(); });
         root.querySelectorAll('[data-on]').forEach(c => c.onchange = async () => { set.items.find(p => p.id === c.dataset.on).on = c.checked; await repo.save(set); re(); });
@@ -183,14 +184,14 @@ export const views = {
   },
 };
 
-function addSetDialog(cur, done, rerender) {
+function addSetDialog(cur, done, rerender, ctx) {
   modal(() => ({
     title: 'Новый набор продуктов',
     html: `<ul class="list"><li><button data-k="empty">Пустой набор<span>›</span></button></li><li><button data-k="copy">Копия текущего («${esc(cur.name)}»)<span>›</span></button></li><li><button data-k="file">Из файла (.xlsx, .csv, .json)<span>›</span></button></li><li><button data-k="manual">Вручную, по одному продукту<span>›</span></button></li></ul>`,
     bind(root, refresh, close) {
       root.querySelectorAll('[data-k]').forEach(b => b.onclick = async () => {
         const k = b.dataset.k; close();
-        if (k === 'file') return importDialog(done);
+        if (k === 'file') return openLoad(ctx, { only: 'products', after: rerender }); // общее окно загрузки; старое importDialog больше не вызывается
         const name = prompt('Название набора', k === 'copy' ? cur.name + ' (копия)' : 'Новый набор'); if (!name) return;
         const s = await repo.add({ id: repo.uid(), name: name.trim(), items: k === 'copy' ? JSON.parse(JSON.stringify(cur.items)) : [] });
         done(s.id); if (k === 'manual') setTimeout(() => addProductDialog(s, rerender), 50);

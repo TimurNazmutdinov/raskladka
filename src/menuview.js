@@ -8,6 +8,7 @@ import { esc, modal } from './ui.js';
 import { openLoad } from './loadview.js';
 
 const ui = { id: null };
+export const focusSet = id => { ui.id = id; }; // открыть вкладку «Меню» на нужном наборе (кнопка «Настроить» в «Поход»)
 export const MCOLS = ['Набор', 'Приём пищи', 'Блюдо', 'Продукт', 'Г_на_чел', 'Мин_г', 'Макс_г', 'Условия', 'Варка_мин'];
 const MEAL_KEY = { завтрак: 'b', обед: 'l', ужин: 'd', перекус: 's', карпит: 's' };
 const norm = s => String(s ?? '').toLowerCase().replace(/[\s_]/g, '');
@@ -109,14 +110,14 @@ function importDialog(done) {
   }));
 }
 
-function addSetDialog(cur, done, rerender) {
+function addSetDialog(cur, done, rerender, ctx) {
   modal(() => ({
     title: 'Новый набор меню',
     html: `<ul class="list"><li><button data-k="empty">Пустой набор<span>›</span></button></li><li><button data-k="copy">Копия текущего («${esc(cur.name)}»)<span>›</span></button></li><li><button data-k="file">Из файла (.xlsx, .csv, .json)<span>›</span></button></li><li><button data-k="manual">Вручную, по одному блюду<span>›</span></button></li></ul>`,
     bind(root, refresh, close) {
       root.querySelectorAll('[data-k]').forEach(b => b.onclick = async () => {
         const k = b.dataset.k; close();
-        if (k === 'file') return importDialog(done);
+        if (k === 'file') return openLoad(ctx, { only: 'dishes', after: rerender }); // общее окно загрузки; старое importDialog больше не вызывается
         const name = prompt('Название набора', k === 'copy' ? cur.name + ' (копия)' : 'Новый набор'); if (!name) return;
         const s = await repo.add({ id: repo.uid(), name: name.trim(), productSetId: cur.productSetId, dishes: k === 'copy' ? JSON.parse(JSON.stringify(cur.dishes)) : [] });
         done(s.id); if (k === 'manual') setTimeout(() => dishDialog(s, { id: 'd' + Date.now().toString(36), meal: 'd', name: '', cook: 0, cond: ['any'], on: true, ing: [{ name: '', g: 80, min: 56, max: 120 }] }, rerender), 50);
@@ -140,7 +141,7 @@ export const views = {
         ${[...Object.entries(MEAL_NAMES), ['', 'Без приёма пищи (его задаёт план)']].filter(([m]) => m || set.dishes.some(d => !d.meal)).map(([m, n]) => { const ds = set.dishes.filter(d => (d.meal || '') === m); return `<h3>${n} · ${ds.length}</h3>${ds.length ? `<div class="tbl"><table class="dtable"><tr><th></th><th>Блюдо</th><th>Состав, г на человека</th><th>Условия</th><th>Варка</th></tr>${ds.map(d => `<tr data-d="${d.id}" class="${d.on ? '' : 'off'}"><td><input type="checkbox" data-on="${d.id}" ${d.on ? 'checked' : ''}${set.readonly ? ' disabled' : ''}></td><td>${esc(d.name)}</td><td class="muted small" style="white-space:normal">${d.ing.map(i => `${esc(String(i.name).split('|')[0])} ${i.g}${i.unit && i.unit !== 'г' ? ' ' + esc(i.unit) : ''}`).join(', ')}</td><td>${(d.cond || []).map(condName).join(', ')}</td><td>${d.cook || 0} мин</td></tr>`).join('')}</table></div>` : '<p class="muted small">Блюд нет.</p>'}`; }).join('')}`,
       bind(root) {
         const re = () => ctx.rerender();
-        bindTabs(root, { repo, rerender: re, onSelect: id => { ui.id = id; re(); }, onAdd: () => addSetDialog(set, id => { ui.id = id; re(); }, re) });
+        bindTabs(root, { repo, rerender: re, onSelect: id => { ui.id = id; re(); }, onAdd: () => addSetDialog(set, id => { ui.id = id; re(); }, re, ctx) });
         root.querySelector('#psel').onchange = async e => { set.productSetId = e.target.value; await repo.save(set); re(); };
         root.querySelector('#chk').onclick = () => problemsDialog(set, re);
         root.querySelector('#ldd').onclick = () => openLoad(ctx, { only: 'dishes', after: re });
