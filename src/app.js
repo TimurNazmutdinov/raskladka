@@ -90,6 +90,6 @@ function renderShell() {
   window.RK = Object.assign(window.RK || {}, { loadFile: (f, ro) => loadFileAll(ctx, f, ro), formBook, repos: { prepo, mrepo, plrepo }, ctx });
   { const t = getTrip(); if (!prepo.get(t.productSet)) t.productSet = prepo.first().id; if (!mrepo.get(t.menuSet)) t.menuSet = (mrepo.list().find(m => m.productSetId === t.productSet) || mrepo.first()).id; saveTrip(); }
   if (!(await store.get('settings', 'consent'))) renderWelcome(); else renderShell();
-  // PWA и service worker отключены: приложение открывается двойным щелчком по index.html (file://).
+  // PWA и service worker отключены: приложение открывается двойным щелчком по Раскладка.html (file://).
   // if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
