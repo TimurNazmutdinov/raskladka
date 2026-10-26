@@ -6,7 +6,7 @@
 
 ## Команды
 - Сборка после правки `src/`: `node tools/build.mjs`
-- Тесты: `node tests/test_engine.mjs`, `node tests/test_gpx.mjs`, `node tests/test_import.mjs`
+- Тесты (каждый — `node tests/<имя>.mjs`): test_engine, test_gpx, test_import, test_units, test_links, test_template, test_simple, test_meals, test_summary, test_buyers
 - Отчёт по встроенным блюдам: `node tests/report_dishes.mjs`
 - Обновить встроенный шаблон Excel (из папки «Шаблон раскладки»): `powershell -ExecutionPolicy Bypass -File tools\update-template.ps1`
 - Python-скрипты в `tools/` (`extract_victor.py`, `make_form.py`, `verify_form.py`) нужны только при наличии файлов Виктора; зависимостей не требуют.

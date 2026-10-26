@@ -4,6 +4,7 @@ import { repo } from './pstore.js';
 import { tabsHtml, bindTabs } from './tabsui.js';
 import { readTable, writeXlsx, download } from './xlsx.js';
 import { form, bindForm, esc, modal } from './ui.js';
+import { openLoad } from './loadview.js';
 
 const ui = { id: null, cat: 'all', q: '' };
 const catName = k => (CATS.find(c => c[0] === k) || [, k])[1];

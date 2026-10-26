@@ -106,12 +106,12 @@ export function openLoad(ctx, { only = null, after } = {}) {
     const errs = blocks.flatMap(b => b.errors);
     return {
       title: 'Загрузка из файла',
-      html: `<p class="muted">Форма Excel (листы «Продукты», «Блюда», «План», «Параметры»), а также .csv и .json. Данные грузятся как в файле: ничего не исправляется и не пересчитывается. Текущий поход не меняется.</p>
+      html: `<p class="muted">Шаблон Excel (листы «Продукты», «Блюда», «План»; скачайте «пустую форму»), а также .csv и .json. Файлы .xls сначала сохраните как .xlsx. Данные грузятся как в файле: ничего не исправляется и не пересчитывается. Текущий поход не меняется.</p>
         <div class="btnrow"><label class="btn filebtn2">Выбрать файл<input type="file" id="f" accept=".xlsx,.xls,.csv,.json" hidden></label><button class="btn ghost" id="blank">Скачать пустую форму</button>${undo ? `<button class="btn ghost" id="undo">Отменить последнюю загрузку</button>` : ''}</div>
         <p class="warnmsg">${esc(err)}</p>
         ${log ? `<h3>Готово</h3><ul class="list">${log.map(l => `<li><span>${esc(l)}</span></li>`).join('')}</ul><div class="btnrow"><button class="btn" id="done">Закрыть</button></div>` : ''}
         ${parsed && !log ? `<h3>Файл «${esc(fname)}» — что найдено</h3>
-          ${blocks.length ? `<div class="tbl"><table class="dtable"><tr><th></th><th>Блок</th><th>Куда и как</th><th>Проверка</th></tr>${blockHtml}</table></div>` : '<p class="warnmsg">Ни продуктов, ни блюд, ни плана не найдено. Проверьте названия листов и заголовки колонок (см. пустую форму).</p>'}
+          ${blocks.length ? `<div class="tbl"><table class="dtable"><tr><th></th><th>Блок</th><th>Куда и как</th><th>Проверка</th></tr>${blockHtml}</table></div>` : '<p class="warnmsg">В файле нет данных для загрузки. Заполните строки под заголовками на листах «Продукты», «Блюда» или «План» (пример — на листе «Как заполнять») и выберите файл снова. Если данные есть, проверьте названия листов и заголовки колонок.</p>'}
           <div class="fld"><label>Пометить новые вкладки «оригинал, только чтение»</label><div class="ctl"><input type="checkbox" id="ro" ${readonly ? 'checked' : ''}></div></div>
           ${unitsHtml()}
           ${linksHtml()}
