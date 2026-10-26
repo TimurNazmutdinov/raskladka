@@ -31,11 +31,11 @@ for (const ms of msets) {
   const calc = E.computeTrip(trip, P), menu = M.buildMenu(trip, calc, ms, ps, P, null, 0), n = 5;
   console.log(`\nМеню 5 чел × 7 дней (${ms.name}):`);
   menu.days.forEach((d, i) => {
-    const per = ['b', 'l', 'd', 's'].map(m => Math.round(M.itemsKcal(d[m]?.items || [], ps.items) / n));
-    console.log(`день ${i + 1} ${days[i].type.padEnd(10)}`, ['b', 'l', 'd'].map(m => (d[m]?.name || '—').slice(0, 26).padEnd(27)).join(''), 'ккал/чел б/о/у/п:', per.join('/'), ' цель', Math.round(calc.days[i].target / n));
-    ['b', 'l', 'd'].forEach((m, k) => { const mn = MIN[m]; if (d[m] && !d[m].empty && per[k] < mn[0] - 5) fail(`день ${i + 1} ${m}: ${per[k]} < ${mn[0]}`); if (d[m]?.empty) fail(`день ${i + 1} ${m}: нет блюда`); });
+    const kc = m => Math.round(M.itemsKcal(d[m]?.items || [], ps.items) / n), per = ['b', 's', 'l', 's2', 'd'].map(kc);
+    console.log(`день ${i + 1} ${days[i].type.padEnd(10)}`, ['b', 'l', 'd'].map(m => (d[m]?.name || '—').slice(0, 26).padEnd(27)).join(''), 'ккал/чел завтрак/перекус/обед/перекус/ужин:', per.join('/'), ' цель', Math.round(calc.days[i].target / n));
+    ['b', 'l', 'd'].forEach((m, k) => { const mn = MIN[m]; if (d[m] && !d[m].empty && kc(m) < mn[0] - 5) fail(`день ${i + 1} ${m}: ${kc(m)} < ${mn[0]}`); if (d[m]?.empty) fail(`день ${i + 1} ${m}: нет блюда`); });
     ['b', 'l', 'd'].forEach(m => { if (i && d[m]?.dish && d[m].dish === menu.days[i - 1][m]?.dish) fail(`день ${i + 1} ${m}: блюдо повторяется два дня подряд`); });
-    d.s.items.forEach(it => { if (/лук|чеснок/i.test(ps.items.find(p => p.id === it.pid)?.name)) fail('лук в перекусе'); });
+    ['s', 's2'].forEach(k => (d[k]?.items || []).forEach(it => { if (/лук|чеснок/i.test(ps.items.find(p => p.id === it.pid)?.name)) fail('лук в перекусе'); }));
   });
   console.log('предупреждения генератора:', menu.warnings.length ? menu.warnings : 'нет');
 }

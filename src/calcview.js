@@ -2,6 +2,7 @@
 import { allParams } from './params.js';
 import { computeTrip, tempText, isRest } from './engine.js';
 import { MEALS, buildMenu, itemsKcal, mealFor, possibleFor, menuProblems } from './menu.js';
+import { mealsOf, slotLabel } from './meals.js';
 import { repo as prepo, setActive } from './pstore.js';
 import { repo as mrepo } from './mstore.js';
 import { repo as plrepo } from './plstore.js';
@@ -13,7 +14,6 @@ import { esc, modal } from './ui.js';
 
 const n0 = x => Math.round(x).toLocaleString('ru');
 const kg = g => (g / 1000).toFixed(1).replace('.', ',');
-const M4 = ['b', 'l', 'd', 's'];
 
 export const activePlan = trip => (trip.planId ? plrepo.get(trip.planId) : null);
 export function sets(trip) {
@@ -23,7 +23,7 @@ export function sets(trip) {
   setActive(pset?.id); return { pset, mset };
 }
 export function sig(trip, pset, mset, P) {
-  return JSON.stringify([trip.group.map(p => [p.weight, p.height, p.age, p.sex, p.appetite, p.share, p.gear, p.veg, p.allergy, p.dislike]), trip.days, trip.prefs, trip.food, trip.gear, trip.adj, pset?.id, pset?.items.map(p => (p.on ? 1 : 0) + p.id).join(), mset?.id, mset?.dishes, P, activePlan(trip)?.id, activePlan(trip)?.rows]);
+  return JSON.stringify([trip.meals, trip.group.map(p => [p.weight, p.height, p.age, p.sex, p.appetite, p.share, p.gear, p.veg, p.allergy, p.dislike]), trip.days, trip.prefs, trip.food, trip.gear, trip.adj, pset?.id, pset?.items.map(p => (p.on ? 1 : 0) + p.id).join(), mset?.id, mset?.dishes, P, activePlan(trip)?.id, activePlan(trip)?.rows]);
 }
 
 // Возвращает {calc, menu, P, pset, mset}; пересобирает меню, если исходные данные изменились (закреплённое остаётся)
@@ -47,8 +47,8 @@ export function ensure(force = false) {
 export function exportData() { const e = ensure(); return e.menu && e.calc.summary ? { trip: getTrip(), ...e } : null; }
 if (typeof window !== 'undefined') window.RK = { buildWorkbook, exportData };
 
-export const menuKcal = (day, prods) => M4.reduce((s, m) => s + itemsKcal(day[m]?.items || [], prods), 0);
-export const menuGrams = day => M4.reduce((s, m) => s + (day[m]?.items || []).reduce((a, i) => a + (i.skip ? 0 : i.g), 0), 0);
+export const menuKcal = (day, prods) => Object.values(day).reduce((s, e) => s + itemsKcal(e?.items || [], prods), 0);
+export const menuGrams = day => Object.values(day).reduce((s, e) => s + (e?.items || []).reduce((a, i) => a + (i.skip ? 0 : i.g), 0), 0);
 const itemName = (it, prods) => it.name || prods.find(p => p.id === it.pid)?.name || '?';
 
 function why(cd, P) {
@@ -63,9 +63,9 @@ function mealDialog(i, m, ctx) {
   const trip = getTrip();
   modal(() => {
     const { calc, menu, P, pset, mset } = ensure(), e = menu.days[i][m], prods = pset.items, ro = e.fromPlan && activePlan(trip)?.readonly;
-    const opts = m === 's' ? [] : possibleFor(trip, calc, mset, pset, P, i, m).filter(d => d.id !== e.dish);
+    const opts = possibleFor(trip, calc, mset, pset, P, i, m).filter(d => d.id !== e.dish);
     return {
-      title: `День ${i + 1} · ${MEALS[m]}`,
+      title: `День ${i + 1} · ${slotLabel(mealsOf(trip, P), m)}`,
       html: `<h3>${esc(e.name || (e.empty ? 'Блюдо убрано' : 'Нет подходящего блюда'))}${e.pin ? ' · закреплено' : ''}</h3>
         ${e.perKcal ? `<p class="muted small">На человека ≈ ${e.perKcal} ккал, ${e.perGrams} г. Варка ${e.cook || 0} мин.</p>` : ''}
         ${e.parts ? e.parts.map(pt => `<h3>${esc(pt.name)}${pt.missing ? ' <span class="bad">— блюда нет в наборе</span>' : ''}</h3><ul class="list">${pt.items.map(it => `<li><span>${esc(itemName(it, prods))}${it.skip ? ` <span class="bad small">не считается: ${esc(it.skip)}</span>` : ''}</span><b>${it.g} ${esc(it.unit || 'г')}</b></li>`).join('') || '<li class="muted">Пусто</li>'}</ul>`).join('') : `<ul class="list">${(e.items || []).map(it => `<li><span>${esc(itemName(it, prods))}${it.skip ? ` <span class="bad small">не считается: ${esc(it.skip)}</span>` : ''}</span><b>${it.g} ${esc(it.unit || 'г')}</b></li>`).join('') || '<li class="muted">Пусто</li>'}</ul>`}
@@ -128,7 +128,8 @@ export const views = {
         <div class="nums"><div><span class="big">${n0(cd.need)}</span><span class="muted small">потребность, ккал</span></div><div><span class="big">${n0(k)}</span><span class="muted small">даёт раскладка, ккал</span></div><div><span class="big ${c < P.cov_warn ? 'bad' : 'good'}">${c}%</span><span class="muted small">покрытие</span></div><div><span class="big">${n0(menuGrams(day))}</span><span class="muted small">граммов на группу</span></div></div>
         <p class="muted small">На человека: ${cd.per.map(x => `${esc(x.p.name || '—')} ${n0(x.total)}`).join(' · ')} ккал</p>${why(cd, P)}</section>`;
     }).join('');
-    const grid = `<div class="tbl"><table class="dtable mgrid"><tr><th>День</th>${M4.map(m => `<th>${MEALS[m]}</th>`).join('')}</tr>${menu.days.map((day, i) => `<tr><td><b>${i + 1}</b><br><span class="muted small">${esc(calc.days[i].d.type)}</span></td>${M4.map(m => { const e = day[m] || {}; return `<td class="mcell" data-m="${i}:${m}">${e.pin ? '📌 ' : ''}${esc(e.name || (e.empty ? 'убрано' : '—'))}${(e.items || []).length ? `<br><span class="muted small">${n0((e.items || []).reduce((a, it) => a + (it.skip ? 0 : it.g), 0))} г · ${n0(itemsKcal(e.items, prods))} ккал${(e.items || []).some(it => it.skip) ? ` · <span class="bad">не считается: ${(e.items || []).filter(it => it.skip).length} стр.</span>` : ''}</span>` : ''}</td>`; }).join('')}</tr>`).join('')}</table></div>`;
+    const slots = mealsOf(trip, P);
+    const grid = `<div class="tbl"><table class="dtable mgrid"><tr><th>День</th>${slots.map(s => `<th>${esc(slotLabel(slots, s.id))}</th>`).join('')}</tr>${menu.days.map((day, i) => `<tr><td><b>${i + 1}</b><br><span class="muted small">${esc(calc.days[i].d.type)}</span></td>${slots.map(s => s.id).map(m => { const e = day[m] || {}; return `<td class="mcell" data-m="${i}:${m}">${e.pin ? '📌 ' : ''}${esc(e.name || (e.empty ? 'убрано' : '—'))}${(e.items || []).length ? `<br><span class="muted small">${n0((e.items || []).reduce((a, it) => a + (it.skip ? 0 : it.g), 0))} г · ${n0(itemsKcal(e.items, prods))} ккал${(e.items || []).some(it => it.skip) ? ` · <span class="bad">не считается: ${(e.items || []).filter(it => it.skip).length} стр.</span>` : ''}</span>` : ''}</td>`; }).join('')}</tr>`).join('')}</table></div>`;
     return {
       html: `<h2>Расчёт</h2>${sel}
         <div class="metrics"><div><span class="big">${S.days}</span><span class="muted small">дней</span></div><div><span class="big">${kg(totG)} кг</span><span class="muted small">вся раскладка</span></div><div><span class="big">${n0(gpd)} г</span><span class="muted small">на чел. в день</span></div><div><span class="big">${n0(totK / S.n / S.days)}</span><span class="muted small">ккал на чел.</span></div><div><span class="big ${covPct < P.cov_warn ? 'bad' : 'good'}">${covPct}%</span><span class="muted small">покрытие</span></div><div><span class="big">${kg(S.fuel)} кг</span><span class="muted small">газ</span></div></div>

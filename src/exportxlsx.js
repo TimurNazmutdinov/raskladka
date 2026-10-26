@@ -2,6 +2,7 @@
 // остальное (оформление, диаграмма, таблицы, проверки данных) сохраняется, формулы пересчитывает Excel при открытии.
 import { opts } from './params.js';
 import { tempText } from './engine.js';
+import { mealsOf } from './meals.js';
 import { xmlEsc, colName, download } from './xlsx.js';
 
 const MEAL_RU = { b: 'Завтрак', l: 'Обед', d: 'Ужин', s: 'Перекус' };
@@ -33,13 +34,13 @@ const setMerges = (xml, refs) => xml.replace(/<mergeCells[^>]*>.*?<\/mergeCells>
 // ---------- данные ----------
 function prepare(D) {
   const { trip, calc, menu, pset } = D, n = calc.summary.n, prods = pset.items;
-  const used = new Set(); menu.days.forEach(d => ['b', 'l', 'd', 's'].forEach(m => (d[m]?.items || []).forEach(it => used.add(it.pid))));
+  const used = new Set(); menu.days.forEach(d => Object.values(d).forEach(e => (e?.items || []).forEach(it => used.add(it.pid))));
   const list = prods.filter(p => p.on || used.has(p.id));
   const idOf = new Map(list.map((p, i) => [p.id, i + 1]));
   // рецепты: по одному на уникальный состав блюда (граммы на человека)
   const recipes = [], byKey = new Map(), names = new Map(), rows = [];
-  menu.days.forEach((day, i) => ['b', 'l', 'd', 's'].forEach(m => {
-    const e = day[m]; if (!e || !e.items?.length) return;
+  menu.days.forEach((day, i) => mealsOf(trip, D.P).forEach(slot => {
+    const m = slot.type, e = day[slot.id]; if (!e || !e.items?.length) return;
     const ings = e.items.filter(it => it.pid || it.name).map(it => ({ pid: it.pid ?? it.name, name: it.name || prods.find(p => p.id === it.pid)?.name || '?', unit: it.unit || 'г', g: Math.round((it.perPortion ?? it.g / n) * 100) / 100 }));
     const base = (e.name || (m === 's' ? 'Перекус' : 'Блюдо')).trim(), key = base + '|' + ings.map(x => x.pid + ':' + x.g).join(',');
     let rec = byKey.get(key);

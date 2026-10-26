@@ -66,7 +66,7 @@ export const views = {
           <div class="ctl"><input type="number" inputmode="decimal" step="any" data-p="${p.id}" value="${getParam(p.id)}"><span class="muted unit">${esc(p.unit)}</span>
           ${isChanged(p.id) ? `<button class="mini" data-reset="${p.id}">По умолчанию: ${p.def}</button>` : ''}</div></div>
           ${p.hint ? `<p class="help" id="help-${p.id}" hidden>${esc(p.hint)}</p>` : ''}`).join('')}
-        ${group === 'menu' ? (() => { const sum = ['split_b', 'split_l', 'split_d', 'split_s'].reduce((a, k) => a + getParam(k), 0); return `<p class="${sum === 100 ? 'good' : 'warnmsg'}"><b>Сумма долей ккал: ${sum}%</b>${sum === 100 ? '' : ' — должна быть 100%, иначе меню будет недобирать или перебирать'}</p>`; })() : ''}
+        ${group === 'menu' ? (() => { const sum = getParam('split_b') + getParam('split_l') + getParam('split_d') + 2 * getParam('split_s'); return `<p class="${sum === 100 ? 'good' : 'warnmsg'}"><b>Сумма долей ккал (завтрак + обед + ужин + 2 перекуса): ${sum}%</b>${sum === 100 ? '' : ' — должна быть 100%, иначе меню будет недобирать или перебирать'}</p>`; })() : ''}
         <button class="btn ghost" id="resetg">Сбросить группу</button>`,
       bind(root) {
         root.querySelectorAll('[data-grp]').forEach(b => b.onclick = () => ctx.go('params', b.dataset.grp, true));

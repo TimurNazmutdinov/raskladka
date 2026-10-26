@@ -7,6 +7,7 @@ import { repo as mrepo } from './mstore.js';
 import { daysSection, ensurePlan, rebuild } from './tripdays.js';
 import * as store from './store.js';
 import { defaultSimple, ensureTrip, setSimpleMode, rebuildSimple } from './simple.js';
+import { TYPES, defaultMeals, mealsOf, shareSum, moveSlot, removeSlot, addSlot, slotLabel } from './meals.js';
 
 export const newTrip = () => ({
   name: '', start: '', end: '', kind: 'mountain', category: CATEGORIES[0],
@@ -19,6 +20,7 @@ export const newTrip = () => ({
 
 let trip;
 export const loadTrip = async () => { trip = ensureTrip((await store.get('trips', 'current')) || newTrip()); return trip; };
+const splitP = () => ({ split_b: getParam('split_b'), split_l: getParam('split_l'), split_d: getParam('split_d'), split_s: getParam('split_s') });
 const simpleDefs = () => ({ appetite: getParam('appetite_def'), shareM: getParam('share_m'), shareF: getParam('share_f') });
 const save = () => store.put('trips', 'current', trip);
 export const getTrip = () => trip;
@@ -138,13 +140,27 @@ export const views = {
   prefs: (_, ctx) => ({ html: `${back('', 'Поход')}<h2>Предпочтения</h2>${form(F.prefs, trip.prefs)}`, bind: bound(ctx, F.prefs, trip.prefs) }),
 
   food(_, ctx) {
+    const slots = mealsOf(trip, splitP()), sum = shareSum(slots);
+    const mealsHtml = `<h3>Приёмы пищи в день</h3><p class="muted small">Добавляйте приёмы и меняйте их порядок. Доля — часть дневных калорий. «Перекус» подбирается из сладкого и орехов набора, если в наборе нет блюд-перекусов.</p>
+      ${slots.map((s, i) => `<div class="mealrow"><b>${i + 1}</b> <select data-mt="${i}">${TYPES.map(([k, n]) => `<option value="${k}"${k === s.type ? ' selected' : ''}>${n}</option>`).join('')}</select> <input data-mn="${i}" placeholder="${esc(slotLabel(slots, s.id))}" value="${esc(s.name || '')}" style="width:130px"> <input data-ms="${i}" type="number" min="0" max="100" value="${s.share}" style="width:60px">% <button class="mini" data-mu="${i}">▲</button><button class="mini" data-mdn="${i}">▼</button><button class="mini" data-mx="${i}">✕</button></div>`).join('')}
+      <p class="${sum === 100 ? 'good' : 'warnmsg'}">Сумма долей: ${sum}%${sum === 100 ? '' : ' — должна быть 100%'}</p>
+      <div class="btnrow"><button class="btn" id="addmeal">Добавить приём</button><button class="btn ghost" id="resetmeals">Стандартный план</button></div>`;
     return {
-      html: `${back('', 'Поход')}<h2>Питание и заброски</h2><div id="foodf">${form(F.food, trip.food)}</div>
+      html: `${back('', 'Поход')}<h2>Питание и заброски</h2>${mealsHtml}<div id="foodf">${form(F.food, trip.food)}</div>
         <p class="muted">Аварийный запас: ${getParam('reserve_days')} дн. (меняется в Настройках)</p><h3>Заброски</h3>
         ${trip.drops.map((d, i) => `<div class="drop">${form(F.drop, d)}<button class="mini" data-deldrop="${i}">Удалить</button></div>`).join('') || '<p class="empty">Заброски не заданы.</p>'}
         <button class="btn" id="adddrop">Добавить заброску</button>`,
       bind(root) {
         bound(ctx, F.food, trip.food)(root.querySelector('#foodf'));
+        const edit = fn => { trip.meals = fn(slots.map(s => ({ ...s }))); save(); ctx.rerender(); };
+        root.querySelectorAll('[data-mt]').forEach(el => el.onchange = () => edit(a => { a[+el.dataset.mt].type = el.value; return a; }));
+        root.querySelectorAll('[data-mn]').forEach(el => el.onchange = () => edit(a => { a[+el.dataset.mn].name = el.value.trim() || undefined; return a; }));
+        root.querySelectorAll('[data-ms]').forEach(el => el.onchange = () => edit(a => { a[+el.dataset.ms].share = Math.max(0, Math.min(100, +el.value || 0)); return a; }));
+        root.querySelectorAll('[data-mu]').forEach(el => el.onclick = () => edit(a => moveSlot(a, +el.dataset.mu, -1)));
+        root.querySelectorAll('[data-mdn]').forEach(el => el.onclick = () => edit(a => moveSlot(a, +el.dataset.mdn, 1)));
+        root.querySelectorAll('[data-mx]').forEach(el => el.onclick = () => edit(a => removeSlot(a, +el.dataset.mx)));
+        root.querySelector('#addmeal').onclick = () => edit(a => addSlot(a));
+        root.querySelector('#resetmeals').onclick = () => { delete trip.meals; save(); ctx.rerender(); };
         root.querySelectorAll('.drop').forEach((el, i) => bindForm(el, F.drop, trip.drops[i], save, () => ctx.rerender()));
         root.querySelector('#adddrop').onclick = () => { trip.drops.push({ after: null, what: '' }); save(); ctx.rerender(); };
         root.querySelectorAll('[data-deldrop]').forEach(b => b.onclick = () => { trip.drops.splice(+b.dataset.deldrop, 1); save(); ctx.rerender(); });

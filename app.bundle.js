@@ -71,10 +71,10 @@ const PARAMS = [
   P('ref_full', 'food', 'Ориентир: сытно', 'г/чел·день', 850),
   P('reserve_days', 'food', 'Аварийный запас', 'дн', 1),
 
-  P('split_b', 'menu', 'Доля ккал: завтрак', '%', 28),
-  P('split_l', 'menu', 'Доля ккал: обед-перекус', '%', 27),
-  P('split_d', 'menu', 'Доля ккал: ужин', '%', 33),
-  P('split_s', 'menu', 'Доля ккал: перекус', '%', 12, 'Сумма четырёх долей должна быть 100%.'),
+  P('split_b', 'menu', 'Доля ккал: завтрак', '%', 25),
+  P('split_l', 'menu', 'Доля ккал: обед-перекус', '%', 25),
+  P('split_d', 'menu', 'Доля ккал: ужин', '%', 30),
+  P('split_s', 'menu', 'Доля ккал: каждый перекус', '%', 10, 'Доли по умолчанию для нового плана питания (завтрак, перекус, обед, перекус, ужин). Сумма по приёмам дня должна быть 100%; свой план питания — в «Питание и заброски».'),
   P('min_b', 'menu', 'Минимум завтрака', 'ккал/чел', 550, 'Ниже минимума блюдо не используется или порция увеличивается в пределах мин/макс.'),
   P('min_l', 'menu', 'Минимум обеда-перекуса', 'ккал/чел', 600),
   P('min_l_g', 'menu', 'Минимум обеда-перекуса по весу', 'г/чел', 150),
@@ -929,6 +929,39 @@ const rebuildSimple = (t, d) => { if (t.simple.on) t.group = virtualGroup(t.simp
 
 return {defaultSimple, virtualGroup, ensureTrip, setSimpleMode, rebuildSimple};
 })();
+__m['meals.js'] = (() => {
+// Приёмы пищи в дне: список «слотов» {id, type b|l|d|s, name?, share %}. По умолчанию: завтрак, перекус, обед, перекус, ужин.
+// Меню хранит приём по id слота; тип слота определяет, какие блюда ему подходят (dish.meal).
+const TYPE_NAMES = { b: 'Завтрак', l: 'Обед', d: 'Ужин', s: 'Перекус' };
+const TYPES = Object.entries(TYPE_NAMES);
+
+// P — параметры; доли по умолчанию берутся из split_b / split_s / split_l / split_d (25/10/25/10/30)
+const defaultMeals = P => [
+  { id: 'b', type: 'b', share: P?.split_b ?? 25 }, { id: 's', type: 's', share: P?.split_s ?? 10 }, { id: 'l', type: 'l', share: P?.split_l ?? 25 },
+  { id: 's2', type: 's', share: P?.split_s ?? 10 }, { id: 'd', type: 'd', share: P?.split_d ?? 30 },
+];
+const mealsOf = (trip, P) => (trip?.meals?.length ? trip.meals : defaultMeals(P));
+const shareSum = slots => slots.reduce((a, s) => a + (+s.share || 0), 0);
+
+// Подпись приёма: своё имя или название типа; одинаковые типы нумеруются («Перекус 1», «Перекус 2»)
+function slotLabel(slots, id) {
+  const k = slots.findIndex(s => s.id === id); if (k < 0) return TYPE_NAMES[id] || id;
+  const s = slots[k]; if (s.name) return s.name;
+  const same = slots.filter(x => x.type === s.type && !x.name);
+  return same.length > 1 ? `${TYPE_NAMES[s.type]} ${same.indexOf(s) + 1}` : TYPE_NAMES[s.type];
+}
+const slotById = (slots, id) => slots.find(s => s.id === id);
+const newSlotId = slots => { let k = 1; while (slots.some(s => s.id === 'x' + k)) k++; return 'x' + k; };
+// Слот для строки плана/загрузки: первый слот нужного типа
+const firstSlotOfType = (slots, type) => slots.find(s => s.type === type)?.id ?? null;
+
+// Редактирование списка (чистые функции, возвращают новый список)
+const moveSlot = (slots, i, d) => { const j = i + d; if (j < 0 || j >= slots.length) return slots; const a = slots.slice(); [a[i], a[j]] = [a[j], a[i]]; return a; };
+const removeSlot = (slots, i) => (slots.length > 1 ? slots.filter((_, k) => k !== i) : slots);
+const addSlot = (slots, type = 's', share = 10) => [...slots, { id: newSlotId(slots), type, share }];
+
+return {TYPE_NAMES, TYPES, defaultMeals, mealsOf, shareSum, slotLabel, slotById, newSlotId, firstSlotOfType, moveSlot, removeSlot, addSlot};
+})();
 __m['trip.js'] = (() => {
 // Экран «Поход»: общий блок, группа, вкладка «Вручную». Данные хранятся в одном объекте trip.
 const {COVERS, DAY_TYPES, CATEGORIES} = __m['defaults.js'];
@@ -939,6 +972,7 @@ const {repo: mrepo} = __m['mstore.js'];
 const {daysSection, ensurePlan, rebuild} = __m['tripdays.js'];
 const store = __m['store.js'];
 const {defaultSimple, ensureTrip, setSimpleMode, rebuildSimple} = __m['simple.js'];
+const {TYPES, defaultMeals, mealsOf, shareSum, moveSlot, removeSlot, addSlot, slotLabel} = __m['meals.js'];
 
 const newTrip = () => ({
   name: '', start: '', end: '', kind: 'mountain', category: CATEGORIES[0],
@@ -951,6 +985,7 @@ const newTrip = () => ({
 
 let trip;
 const loadTrip = async () => { trip = ensureTrip((await store.get('trips', 'current')) || newTrip()); return trip; };
+const splitP = () => ({ split_b: getParam('split_b'), split_l: getParam('split_l'), split_d: getParam('split_d'), split_s: getParam('split_s') });
 const simpleDefs = () => ({ appetite: getParam('appetite_def'), shareM: getParam('share_m'), shareF: getParam('share_f') });
 const save = () => store.put('trips', 'current', trip);
 const getTrip = () => trip;
@@ -1070,13 +1105,27 @@ const views = {
   prefs: (_, ctx) => ({ html: `${back('', 'Поход')}<h2>Предпочтения</h2>${form(F.prefs, trip.prefs)}`, bind: bound(ctx, F.prefs, trip.prefs) }),
 
   food(_, ctx) {
+    const slots = mealsOf(trip, splitP()), sum = shareSum(slots);
+    const mealsHtml = `<h3>Приёмы пищи в день</h3><p class="muted small">Добавляйте приёмы и меняйте их порядок. Доля — часть дневных калорий. «Перекус» подбирается из сладкого и орехов набора, если в наборе нет блюд-перекусов.</p>
+      ${slots.map((s, i) => `<div class="mealrow"><b>${i + 1}</b> <select data-mt="${i}">${TYPES.map(([k, n]) => `<option value="${k}"${k === s.type ? ' selected' : ''}>${n}</option>`).join('')}</select> <input data-mn="${i}" placeholder="${esc(slotLabel(slots, s.id))}" value="${esc(s.name || '')}" style="width:130px"> <input data-ms="${i}" type="number" min="0" max="100" value="${s.share}" style="width:60px">% <button class="mini" data-mu="${i}">▲</button><button class="mini" data-mdn="${i}">▼</button><button class="mini" data-mx="${i}">✕</button></div>`).join('')}
+      <p class="${sum === 100 ? 'good' : 'warnmsg'}">Сумма долей: ${sum}%${sum === 100 ? '' : ' — должна быть 100%'}</p>
+      <div class="btnrow"><button class="btn" id="addmeal">Добавить приём</button><button class="btn ghost" id="resetmeals">Стандартный план</button></div>`;
     return {
-      html: `${back('', 'Поход')}<h2>Питание и заброски</h2><div id="foodf">${form(F.food, trip.food)}</div>
+      html: `${back('', 'Поход')}<h2>Питание и заброски</h2>${mealsHtml}<div id="foodf">${form(F.food, trip.food)}</div>
         <p class="muted">Аварийный запас: ${getParam('reserve_days')} дн. (меняется в Настройках)</p><h3>Заброски</h3>
         ${trip.drops.map((d, i) => `<div class="drop">${form(F.drop, d)}<button class="mini" data-deldrop="${i}">Удалить</button></div>`).join('') || '<p class="empty">Заброски не заданы.</p>'}
         <button class="btn" id="adddrop">Добавить заброску</button>`,
       bind(root) {
         bound(ctx, F.food, trip.food)(root.querySelector('#foodf'));
+        const edit = fn => { trip.meals = fn(slots.map(s => ({ ...s }))); save(); ctx.rerender(); };
+        root.querySelectorAll('[data-mt]').forEach(el => el.onchange = () => edit(a => { a[+el.dataset.mt].type = el.value; return a; }));
+        root.querySelectorAll('[data-mn]').forEach(el => el.onchange = () => edit(a => { a[+el.dataset.mn].name = el.value.trim() || undefined; return a; }));
+        root.querySelectorAll('[data-ms]').forEach(el => el.onchange = () => edit(a => { a[+el.dataset.ms].share = Math.max(0, Math.min(100, +el.value || 0)); return a; }));
+        root.querySelectorAll('[data-mu]').forEach(el => el.onclick = () => edit(a => moveSlot(a, +el.dataset.mu, -1)));
+        root.querySelectorAll('[data-mdn]').forEach(el => el.onclick = () => edit(a => moveSlot(a, +el.dataset.mdn, 1)));
+        root.querySelectorAll('[data-mx]').forEach(el => el.onclick = () => edit(a => removeSlot(a, +el.dataset.mx)));
+        root.querySelector('#addmeal').onclick = () => edit(a => addSlot(a));
+        root.querySelector('#resetmeals').onclick = () => { delete trip.meals; save(); ctx.rerender(); };
         root.querySelectorAll('.drop').forEach((el, i) => bindForm(el, F.drop, trip.drops[i], save, () => ctx.rerender()));
         root.querySelector('#adddrop').onclick = () => { trip.drops.push({ after: null, what: '' }); save(); ctx.rerender(); };
         root.querySelectorAll('[data-deldrop]').forEach(b => b.onclick = () => { trip.drops.splice(+b.dataset.deldrop, 1); save(); ctx.rerender(); });
@@ -1432,8 +1481,8 @@ return {COLS, productRows, parseProducts, searchOff, byBarcode, views};
 __m['menu.js'] = (() => {
 // Генератор меню: собирает меню ТОЛЬКО из готовых блюд выбранного набора меню и продуктов выбранного набора продуктов.
 // Блюдо: {id, meal b|l|d|s, name, cook, cond[], on, ing:[{name (допустимо «А|Б»), g, min, max}]} — граммы на человека при «стандарте».
+const {mealsOf, slotLabel, slotById} = __m['meals.js'];
 const MEALS = { b: 'Завтрак', l: 'Обед', d: 'Ужин', s: 'Перекус' };
-const ORDER = ['b', 'l', 'd'];
 const ONION = /(^|[\s(])(лук|чеснок)/i; // лук и чеснок отдельными продуктами не предлагаем
 
 const has = (txt, w) => w && txt.toLowerCase().includes(w.toLowerCase());
@@ -1522,58 +1571,64 @@ function buildMenu(trip, calc, mset, pset, P, old = null, seed = 0) {
   const usage = {}, lastMeal = {};
   const cov = calc.days.length ? calc.days[0].cover : 0.67, covK = cov / 0.67;
   const hotLunchAlways = trip.food.lunchHot || String(trip.food.hot) === '3';
+  // приёмы дня — список слотов (по умолчанию завтрак, перекус, обед, перекус, ужин); «перекусы в личке» не кладём в раскладку, их долю получают остальные приёмы
+  const slots = mealsOf(trip, P), personalSn = trip.prefs?.snacks === 'personal';
+  const snSum = slots.filter(s => s.type === 's').reduce((a, s) => a + (+s.share || 0), 0), mainK = personalSn && snSum < 100 ? 100 / (100 - snSum) : 1;
   calc.days.forEach((cd, i) => {
-    const flags = dayFlags(cd, i, P), ctx = { i, flags, byName, group, n }, day = {}, used = new Set(), perDay = cd.target / n;
-    const split = { b: P.split_b, l: P.split_l, d: P.split_d, s: P.split_s };
+    const flags = dayFlags(cd, i, P), ctx = { i, flags, byName, group, n }, day = {}, used = new Set(), snackUsed = new Set(), perDay = cd.target / n;
     const adj = m => ((trip.adj?.meal?.[m] ?? 0) / 100 + 1) * ((trip.adj?.dayType?.[cd.d.type] ?? 0) / 100 + 1);
-    ORDER.forEach((m, mi) => {
-      const budget = perDay * split[m] / 100 * adj(m), prev = old?.days?.[i]?.[m];
-      if (prev?.fixed) { day[m] = prev; return; }
-      if (prev?.empty) { day[m] = { empty: true, items: [] }; return; }
+    slots.forEach((slot, mi) => {
+      const m = slot.type, id = slot.id, budget = perDay * (+slot.share || 0) / 100 * adj(m) * (m === 's' ? 1 : mainK), prev = old?.days?.[i]?.[id];
+      if (prev?.fixed) { day[id] = prev; return; }
+      if (prev?.empty) { day[id] = { empty: true, items: [] }; return; }
+      if (m === 's' && personalSn) { day[id] = { items: [], name: 'Перекус (в личке)', personal: true }; return; }
       let dishes = mset.dishes.filter(d => d.meal === m);
-      if (prev?.pin && prev.dish) { const d = dishes.find(x => x.id === prev.dish); const sc = d && scale(d, ctx, budget, i, 0); if (sc) { day[m] = { ...toEntry(d, sc, n, ctx), pin: true }; usage[d.id] = (usage[d.id] || 0) + 1; lastMeal[m] = d.id; const g = mainGrain(d, ctx); if (g) used.add(g); return; } }
+      if (prev?.pin && prev.dish) { const d = dishes.find(x => x.id === prev.dish); const sc = d && scale(d, ctx, budget, i, 0); if (sc) { day[id] = { ...toEntry(d, sc, n, ctx), pin: true }; usage[d.id] = (usage[d.id] || 0) + 1; lastMeal[id] = d.id; const g = mainGrain(d, ctx); if (g) used.add(g); return; } }
       let cand = dishes.map(d => ({ d, sc: usable(d, m, ctx, budget, P, covK) })).filter(x => x.sc);
+      if (!cand.length && m === 's') { day[id] = buildSnack(budget * n, n, ctx, prods, P, i + mi * 3, snackUsed); return; } // блюд-перекусов в наборе нет — собираем из продуктов
       if (m === 'l') {
         const hot = cand.filter(x => isHotLunch(x.d)), cold = cand.filter(x => !isHotLunch(x.d));
         if (hotLunchAlways && hot.length) cand = hot; else if ((flags.rest || flags.cold) && hot.length) cand = hot; else if (cold.length) cand = cold;
       }
       if (flags.assault) { const q = cand.filter(x => (x.d.cook || 0) <= P.assault_cook); cand = q.length ? q : [...cand].sort((a, b) => (a.d.cook || 0) - (b.d.cook || 0)).slice(0, 2); }
-      const fresh = cand.filter(x => x.d.id !== lastMeal[m]); if (fresh.length) cand = fresh;
+      const fresh = cand.filter(x => x.d.id !== lastMeal[id]); if (fresh.length) cand = fresh;
       const nograin = cand.filter(x => { const g = mainGrain(x.d, ctx); return !g || !used.has(g); }); if (nograin.length) cand = nograin;
-      const recent = id => menuRecent(days, i, m, id, P.rot_days);
+      const recent = did => menuRecent(days, i, slot.id, did, P.rot_days);
       const h = id => { let x = 0; for (const ch of id + seed + i + m) x = (x * 31 + ch.charCodeAt(0)) % 997; return x % 10; };
       cand.sort((a, b) => {
         const sc = x => (usage[x.d.id] || 0) * 4 + (recent(x.d.id) ? 20 : 0) + h(x.d.id) + Math.abs(x.sc.kcal - budget) / 40 + ((flags.alt3000 && (m === 'l')) ? -carbShare(x.sc.items) * 12 : 0) - (trip.ratings?.[x.d.id] || 0) * 3;
         return sc(a) - sc(b);
       });
       const best = cand[0];
-      if (!best) { day[m] = { empty: true, items: [], none: true }; warnings.push(`День ${i + 1}, ${MEALS[m].toLowerCase()}: нет подходящего блюда в наборе (проверьте продукты и условия блюд)`); return; }
-      usage[best.d.id] = (usage[best.d.id] || 0) + 1; lastMeal[m] = best.d.id; const g = mainGrain(best.d, ctx); if (g) used.add(g);
-      day[m] = toEntry(best.d, best.sc, n, ctx);
+      if (!best) { day[id] = { empty: true, items: [], none: true }; warnings.push(`День ${i + 1}, ${slotLabel(slots, id).toLowerCase()}: нет подходящего блюда в наборе (проверьте продукты и условия блюд)`); return; }
+      usage[best.d.id] = (usage[best.d.id] || 0) + 1; lastMeal[id] = best.d.id; const g = mainGrain(best.d, ctx); if (g) used.add(g);
+      day[id] = toEntry(best.d, best.sc, n, ctx);
     });
-    // перекусы: остаток дневной цели
-    const eaten = ORDER.reduce((s, m) => s + itemsKcal(day[m]?.items || [], prods), 0);
-    const rem = Math.max(0, cd.target - eaten) * adj('s');
-    day.s = buildSnack(rem, n, ctx, prods, mset, P, i);
     days.push(day);
   });
   // проверки минимумов по каждому дню
-  days.forEach((d, i) => ORDER.forEach(m => { const e = d[m]; if (!e || e.empty) return; const per = itemsKcal(e.items, prods) / n, mn = minFor(m, P, covK); if (per < mn * 0.97) warnings.push(`День ${i + 1}, ${MEALS[m].toLowerCase()}: ${Math.round(per)} ккал на человека, меньше минимума ${Math.round(mn)}`); }));
+  days.forEach((d, i) => slots.forEach(slot => { const e = d[slot.id]; if (!e || e.empty) return; const per = itemsKcal(e.items, prods) / n, mn = minFor(slot.type, P, covK); if (per < mn * 0.97) warnings.push(`День ${i + 1}, ${slotLabel(slots, slot.id).toLowerCase()}: ${Math.round(per)} ккал на человека, меньше минимума ${Math.round(mn)}`); }));
+  // при заданных минимумах приёмов день может выйти за цель — говорим об этом, а не молча урезаем
+  calc.days.forEach((cd, i) => { const per = slots.reduce((s, sl) => s + itemsKcal(days[i][sl.id]?.items || [], prods), 0) / n, tg = cd.target / n; if (tg > 0 && per > tg * 1.05) warnings.push(`День ${i + 1}: меню даёт ${Math.round(per)} ккал на человека при цели ${Math.round(tg)} (больше на ${Math.round((per / tg - 1) * 100)}%): сработали минимумы приёмов`); });
   return { days, warnings, seed };
 }
 const menuRecent = (days, i, m, id, k) => days.slice(Math.max(0, i - k + 1)).some(d => d[m]?.dish === id);
 
-function buildSnack(rem, n, ctx, prods, mset, P, i) {
+// Перекус из продуктов набора на свой бюджет rem (ккал на всю группу). salt — чтобы перекусы разных приёмов и дней отличались; usedSet — продукты, уже взятые в перекусы этого дня
+function buildSnack(rem, n, ctx, prods, P, salt, usedSet) {
+  const i = ctx.i;
   if (rem < 50 * n) return { items: [], name: 'Перекус', kcalLeft: 0 };
   let cand = prods.filter(p => p.on && ['sweet', 'nuts'].includes(p.cat) && p.kcal > 150 && !/паста/i.test(p.name) && !ONION.test(p.name) && allowed(p, ctx.group) && freshOk(p, i, ctx.flags));
+  const unused = cand.filter(p => !usedSet.has(p.id)); if (unused.length >= 3) cand = unused;
   if (ctx.flags.alt3000) { const sw = cand.filter(p => p.f < 25 || p.c > 55); if (sw.length >= 3) cand = sw; }
   if (!cand.length) return { items: [], name: 'Перекус' };
-  cand.sort((a, b) => ((a.name.charCodeAt(0) + i * 7) % 11) - ((b.name.charCodeAt(0) + i * 7) % 11));
+  cand.sort((a, b) => ((a.name.charCodeAt(0) + salt * 7) % 11) - ((b.name.charCodeAt(0) + salt * 7) % 11));
   const cap = P.snack_cap * n; let k = Math.min(3, cand.length), items = [];
   for (; k <= Math.min(6, cand.length); k++) {
     items = cand.slice(0, k).map(p => ({ pid: p.id, g: Math.min(cap, round5(rem / k / p.kcal * 100)) }));
     if (itemsKcal(items, prods) >= rem * .93) break;
   }
+  items.forEach(it => usedSet.add(it.pid));
   return { items, name: 'Перекус из набора', pin: false, dish: null };
 }
 
@@ -1581,13 +1636,14 @@ function buildSnack(rem, n, ctx, prods, mset, P, i) {
 function mealFor(trip, calc, mset, pset, P, i, m, dishId) {
   const cd = calc.days[i], n = calc.summary.n, prods = pset.items, byName = nameMap(prods);
   const ctx = { i, flags: dayFlags(cd, i, P), byName, group: trip.group, n }, d = mset.dishes.find(x => x.id === dishId);
-  const split = { b: P.split_b, l: P.split_l, d: P.split_d }[m], sc = d && scale(d, ctx, cd.target / n * split / 100, i, 0);
+  const sl = slotById(mealsOf(trip, P), m) || { share: P['split_' + m] }, sc = d && scale(d, ctx, cd.target / n * (+sl.share || 0) / 100, i, 0);
   return sc ? { ...toEntry(d, sc, n, ctx), pin: true } : { empty: true, items: [] };
 }
 function possibleFor(trip, calc, mset, pset, P, i, m) {
   const n = calc.summary.n, cd = calc.days[i], byName = nameMap(pset.items);
   const ctx = { i, flags: dayFlags(cd, i, P), byName, group: trip.group, n }, covK = calc.days[0].cover / 0.67;
-  return mset.dishes.filter(d => d.meal === m && usable(d, m, ctx, cd.target / n * ({ b: P.split_b, l: P.split_l, d: P.split_d }[m]) / 100, P, covK));
+  const sl = slotById(mealsOf(trip, P), m) || { type: m, share: P['split_' + m] }, type = sl.type;
+  return mset.dishes.filter(d => d.meal === type && usable(d, type, ctx, cd.target / n * (+sl.share || 0) / 100, P, covK));
 }
 const findDish = (mset, id) => mset?.dishes.find(d => d.id === id);
 
@@ -1623,6 +1679,7 @@ return {repo, loadPlans};
 __m['plan.js'] = (() => {
 // Меню-план: какие блюда стоят в ячейках «день × приём пищи». План «оригинал» применяется без генерации и масштабирования.
 const {MEALS} = __m['menu.js'];
+const {mealsOf, firstSlotOfType} = __m['meals.js'];
 
 const DASH = ' + ';
 // Строит меню из плана. Количества — как в файле: на порцию × порции (из плана, иначе число участников).
@@ -1634,7 +1691,8 @@ function planMenu(trip, calc, plan, dset, pset) {
     const i = row.day - 1;
     if (i < 0 || i >= days.length) { warnings.push(`План: день ${row.day} (${row.dish.trim()}) вне дней похода — не применён`); continue; }
     const d = dishBy.get(row.dish), portions = row.portions ?? n;
-    const cell = days[i][row.mealKey] ||= { name: '', parts: [], items: [], fixed: true, pin: true, fromPlan: true, comments: [] };
+    const slot = firstSlotOfType(mealsOf(trip), row.mealKey) ?? row.mealKey; // строка плана ложится в первый приём нужного типа
+    const cell = days[i][slot] ||= { name: '', parts: [], items: [], fixed: true, pin: true, fromPlan: true, comments: [] };
     if (!d) { warnings.push(`День ${row.day}, ${MEALS[row.mealKey].toLowerCase()}: блюда «${row.dish.trim()}» нет в наборе блюд`); cell.parts.push({ dish: row.dish, name: row.dish, items: [], missing: true }); }
     else {
       const items = d.ing.map(ing => {
@@ -2174,6 +2232,7 @@ __m['exportxlsx.js'] = (() => {
 // остальное (оформление, диаграмма, таблицы, проверки данных) сохраняется, формулы пересчитывает Excel при открытии.
 const {opts} = __m['params.js'];
 const {tempText} = __m['engine.js'];
+const {mealsOf} = __m['meals.js'];
 const {xmlEsc, colName, download} = __m['xlsx.js'];
 
 const MEAL_RU = { b: 'Завтрак', l: 'Обед', d: 'Ужин', s: 'Перекус' };
@@ -2205,13 +2264,13 @@ const setMerges = (xml, refs) => xml.replace(/<mergeCells[^>]*>.*?<\/mergeCells>
 // ---------- данные ----------
 function prepare(D) {
   const { trip, calc, menu, pset } = D, n = calc.summary.n, prods = pset.items;
-  const used = new Set(); menu.days.forEach(d => ['b', 'l', 'd', 's'].forEach(m => (d[m]?.items || []).forEach(it => used.add(it.pid))));
+  const used = new Set(); menu.days.forEach(d => Object.values(d).forEach(e => (e?.items || []).forEach(it => used.add(it.pid))));
   const list = prods.filter(p => p.on || used.has(p.id));
   const idOf = new Map(list.map((p, i) => [p.id, i + 1]));
   // рецепты: по одному на уникальный состав блюда (граммы на человека)
   const recipes = [], byKey = new Map(), names = new Map(), rows = [];
-  menu.days.forEach((day, i) => ['b', 'l', 'd', 's'].forEach(m => {
-    const e = day[m]; if (!e || !e.items?.length) return;
+  menu.days.forEach((day, i) => mealsOf(trip, D.P).forEach(slot => {
+    const m = slot.type, e = day[slot.id]; if (!e || !e.items?.length) return;
     const ings = e.items.filter(it => it.pid || it.name).map(it => ({ pid: it.pid ?? it.name, name: it.name || prods.find(p => p.id === it.pid)?.name || '?', unit: it.unit || 'г', g: Math.round((it.perPortion ?? it.g / n) * 100) / 100 }));
     const base = (e.name || (m === 's' ? 'Перекус' : 'Блюдо')).trim(), key = base + '|' + ings.map(x => x.pid + ':' + x.g).join(',');
     let rec = byKey.get(key);
@@ -2385,6 +2444,7 @@ __m['calcview.js'] = (() => {
 const {allParams} = __m['params.js'];
 const {computeTrip, tempText, isRest} = __m['engine.js'];
 const {MEALS, buildMenu, itemsKcal, mealFor, possibleFor, menuProblems} = __m['menu.js'];
+const {mealsOf, slotLabel} = __m['meals.js'];
 const {repo: prepo, setActive} = __m['pstore.js'];
 const {repo: mrepo} = __m['mstore.js'];
 const {repo: plrepo} = __m['plstore.js'];
@@ -2396,7 +2456,6 @@ const {esc, modal} = __m['ui.js'];
 
 const n0 = x => Math.round(x).toLocaleString('ru');
 const kg = g => (g / 1000).toFixed(1).replace('.', ',');
-const M4 = ['b', 'l', 'd', 's'];
 
 const activePlan = trip => (trip.planId ? plrepo.get(trip.planId) : null);
 function sets(trip) {
@@ -2406,7 +2465,7 @@ function sets(trip) {
   setActive(pset?.id); return { pset, mset };
 }
 function sig(trip, pset, mset, P) {
-  return JSON.stringify([trip.group.map(p => [p.weight, p.height, p.age, p.sex, p.appetite, p.share, p.gear, p.veg, p.allergy, p.dislike]), trip.days, trip.prefs, trip.food, trip.gear, trip.adj, pset?.id, pset?.items.map(p => (p.on ? 1 : 0) + p.id).join(), mset?.id, mset?.dishes, P, activePlan(trip)?.id, activePlan(trip)?.rows]);
+  return JSON.stringify([trip.meals, trip.group.map(p => [p.weight, p.height, p.age, p.sex, p.appetite, p.share, p.gear, p.veg, p.allergy, p.dislike]), trip.days, trip.prefs, trip.food, trip.gear, trip.adj, pset?.id, pset?.items.map(p => (p.on ? 1 : 0) + p.id).join(), mset?.id, mset?.dishes, P, activePlan(trip)?.id, activePlan(trip)?.rows]);
 }
 
 // Возвращает {calc, menu, P, pset, mset}; пересобирает меню, если исходные данные изменились (закреплённое остаётся)
@@ -2430,8 +2489,8 @@ function ensure(force = false) {
 function exportData() { const e = ensure(); return e.menu && e.calc.summary ? { trip: getTrip(), ...e } : null; }
 if (typeof window !== 'undefined') window.RK = { buildWorkbook, exportData };
 
-const menuKcal = (day, prods) => M4.reduce((s, m) => s + itemsKcal(day[m]?.items || [], prods), 0);
-const menuGrams = day => M4.reduce((s, m) => s + (day[m]?.items || []).reduce((a, i) => a + (i.skip ? 0 : i.g), 0), 0);
+const menuKcal = (day, prods) => Object.values(day).reduce((s, e) => s + itemsKcal(e?.items || [], prods), 0);
+const menuGrams = day => Object.values(day).reduce((s, e) => s + (e?.items || []).reduce((a, i) => a + (i.skip ? 0 : i.g), 0), 0);
 const itemName = (it, prods) => it.name || prods.find(p => p.id === it.pid)?.name || '?';
 
 function why(cd, P) {
@@ -2446,9 +2505,9 @@ function mealDialog(i, m, ctx) {
   const trip = getTrip();
   modal(() => {
     const { calc, menu, P, pset, mset } = ensure(), e = menu.days[i][m], prods = pset.items, ro = e.fromPlan && activePlan(trip)?.readonly;
-    const opts = m === 's' ? [] : possibleFor(trip, calc, mset, pset, P, i, m).filter(d => d.id !== e.dish);
+    const opts = possibleFor(trip, calc, mset, pset, P, i, m).filter(d => d.id !== e.dish);
     return {
-      title: `День ${i + 1} · ${MEALS[m]}`,
+      title: `День ${i + 1} · ${slotLabel(mealsOf(trip, P), m)}`,
       html: `<h3>${esc(e.name || (e.empty ? 'Блюдо убрано' : 'Нет подходящего блюда'))}${e.pin ? ' · закреплено' : ''}</h3>
         ${e.perKcal ? `<p class="muted small">На человека ≈ ${e.perKcal} ккал, ${e.perGrams} г. Варка ${e.cook || 0} мин.</p>` : ''}
         ${e.parts ? e.parts.map(pt => `<h3>${esc(pt.name)}${pt.missing ? ' <span class="bad">— блюда нет в наборе</span>' : ''}</h3><ul class="list">${pt.items.map(it => `<li><span>${esc(itemName(it, prods))}${it.skip ? ` <span class="bad small">не считается: ${esc(it.skip)}</span>` : ''}</span><b>${it.g} ${esc(it.unit || 'г')}</b></li>`).join('') || '<li class="muted">Пусто</li>'}</ul>`).join('') : `<ul class="list">${(e.items || []).map(it => `<li><span>${esc(itemName(it, prods))}${it.skip ? ` <span class="bad small">не считается: ${esc(it.skip)}</span>` : ''}</span><b>${it.g} ${esc(it.unit || 'г')}</b></li>`).join('') || '<li class="muted">Пусто</li>'}</ul>`}
@@ -2511,7 +2570,8 @@ const views = {
         <div class="nums"><div><span class="big">${n0(cd.need)}</span><span class="muted small">потребность, ккал</span></div><div><span class="big">${n0(k)}</span><span class="muted small">даёт раскладка, ккал</span></div><div><span class="big ${c < P.cov_warn ? 'bad' : 'good'}">${c}%</span><span class="muted small">покрытие</span></div><div><span class="big">${n0(menuGrams(day))}</span><span class="muted small">граммов на группу</span></div></div>
         <p class="muted small">На человека: ${cd.per.map(x => `${esc(x.p.name || '—')} ${n0(x.total)}`).join(' · ')} ккал</p>${why(cd, P)}</section>`;
     }).join('');
-    const grid = `<div class="tbl"><table class="dtable mgrid"><tr><th>День</th>${M4.map(m => `<th>${MEALS[m]}</th>`).join('')}</tr>${menu.days.map((day, i) => `<tr><td><b>${i + 1}</b><br><span class="muted small">${esc(calc.days[i].d.type)}</span></td>${M4.map(m => { const e = day[m] || {}; return `<td class="mcell" data-m="${i}:${m}">${e.pin ? '📌 ' : ''}${esc(e.name || (e.empty ? 'убрано' : '—'))}${(e.items || []).length ? `<br><span class="muted small">${n0((e.items || []).reduce((a, it) => a + (it.skip ? 0 : it.g), 0))} г · ${n0(itemsKcal(e.items, prods))} ккал${(e.items || []).some(it => it.skip) ? ` · <span class="bad">не считается: ${(e.items || []).filter(it => it.skip).length} стр.</span>` : ''}</span>` : ''}</td>`; }).join('')}</tr>`).join('')}</table></div>`;
+    const slots = mealsOf(trip, P);
+    const grid = `<div class="tbl"><table class="dtable mgrid"><tr><th>День</th>${slots.map(s => `<th>${esc(slotLabel(slots, s.id))}</th>`).join('')}</tr>${menu.days.map((day, i) => `<tr><td><b>${i + 1}</b><br><span class="muted small">${esc(calc.days[i].d.type)}</span></td>${slots.map(s => s.id).map(m => { const e = day[m] || {}; return `<td class="mcell" data-m="${i}:${m}">${e.pin ? '📌 ' : ''}${esc(e.name || (e.empty ? 'убрано' : '—'))}${(e.items || []).length ? `<br><span class="muted small">${n0((e.items || []).reduce((a, it) => a + (it.skip ? 0 : it.g), 0))} г · ${n0(itemsKcal(e.items, prods))} ккал${(e.items || []).some(it => it.skip) ? ` · <span class="bad">не считается: ${(e.items || []).filter(it => it.skip).length} стр.</span>` : ''}</span>` : ''}</td>`; }).join('')}</tr>`).join('')}</table></div>`;
     return {
       html: `<h2>Расчёт</h2>${sel}
         <div class="metrics"><div><span class="big">${S.days}</span><span class="muted small">дней</span></div><div><span class="big">${kg(totG)} кг</span><span class="muted small">вся раскладка</span></div><div><span class="big">${n0(gpd)} г</span><span class="muted small">на чел. в день</span></div><div><span class="big">${n0(totK / S.n / S.days)}</span><span class="muted small">ккал на чел.</span></div><div><span class="big ${covPct < P.cov_warn ? 'bad' : 'good'}">${covPct}%</span><span class="muted small">покрытие</span></div><div><span class="big">${kg(S.fuel)} кг</span><span class="muted small">газ</span></div></div>
@@ -2539,13 +2599,14 @@ __m['shop.js'] = (() => {
 const {allParams, opts, saveOpts} = __m['params.js'];
 const {SHOP_DEPT} = __m['products.js'];
 const {MEALS, allowed} = __m['menu.js'];
+const {mealsOf, slotLabel} = __m['meals.js'];
 const {products, byId} = __m['pstore.js'];
 const {getTrip, saveTrip, setTrip, newTrip} = __m['trip.js'];
 const {ensure, menuGrams, exportData} = __m['calcview.js'];
 const {exportExcel} = __m['exportxlsx.js'];
 const {esc} = __m['ui.js'];
 
-const M4 = ['b', 'l', 'd', 's'], n0 = x => Math.round(x).toLocaleString('ru'), kg = g => (g / 1000).toFixed(1).replace('.', ',');
+const n0 = x => Math.round(x).toLocaleString('ru'), kg = g => (g / 1000).toFixed(1).replace('.', ',');
 const DEPT_ORDER = ['Овощи', 'Хлеб', 'Мясо', 'Молочный отдел', 'Бакалея', 'Специи', 'Сладкое', 'Сухофрукты и орехи', 'Напитки', 'Прочее'];
 
 // Аварийный запас: калорийные продукты на reserve_days дней
@@ -2563,7 +2624,7 @@ function shopData() {
   const trip = getTrip(), { calc, menu, P } = ensure();
   if (!menu) return null;
   const n = calc.summary.n, need = {}, add = (pid, g, tag) => { need[pid] ??= { g: 0, reserve: 0 }; need[pid][tag || 'g'] += g; };
-  menu.days.forEach(d => M4.forEach(m => (d[m]?.items || []).forEach(it => add(it.pid, it.g))));
+  menu.days.forEach(d => Object.values(d).forEach(e => (e?.items || []).forEach(it => add(it.pid, it.g))));
   const extra = (name, g) => { const p = products().find(x => x.on && x.name === name); if (p && g > 0) add(p.id, g); };
   extra('Соль', P.salt_fix + P.salt_pp * n * menu.days.length);
   const reserve = reserveItems(trip, calc, P);
@@ -2600,7 +2661,7 @@ function textExport(D) {
   const { trip, rows, calc } = D, t = [`Раскладка: ${trip.name || 'поход'}`, `${calc.summary.days} дн., ${calc.summary.n} чел.`, '', 'СПИСОК ПОКУПОК'];
   DEPT_ORDER.forEach(dep => { const r = rows.filter(x => x.dept === dep); if (r.length) { t.push(dep + ':'); r.forEach(x => t.push(`  ${x.p.name} — ${x.packs && opts.round ? `${x.packs} уп. (${n0(x.buy)} г)` : n0(x.total) + ' г'}`)); } });
   t.push('', 'ПО ДНЯМ');
-  D.menu.days.forEach((d, i) => { t.push(`День ${i + 1}`); M4.forEach(m => { const e = d[m]; if (e?.items?.length) t.push(`  ${MEALS[m]}: ${e.name || ''} — ${e.items.map(it => `${byId(it.pid)?.name} ${it.g} г`).join(', ')}`); }); });
+  D.menu.days.forEach((d, i) => { t.push(`День ${i + 1}`); const sl = mealsOf(trip, D.P); sl.forEach(s => { const e = d[s.id]; if (e?.items?.length) t.push(`  ${slotLabel(sl, s.id)}: ${e.name || ''} — ${e.items.map(it => `${byId(it.pid)?.name} ${it.g} г`).join(', ')}`); }); });
   return t.join('\n');
 }
 const csvExport = D => '﻿Товар;Нужно, г;Резерв, г;Упаковка, г;Упаковок;Купить, г;Отдел\n' + D.rows.map(r => [r.p.name, r.g, r.reserve, r.p.pack || '', r.packs ?? '', r.buy, r.dept].join(';')).join('\n');
@@ -2620,9 +2681,9 @@ const views = {
         ${sum ? `<p><b>Итого ${n0(sum)} ${opts.currency}</b> · с человека ${n0(sum / n)} ${opts.currency}</p>` : '<p class="muted small">Цены не заданы. Их можно указать в карточке продукта.</p>'}
         <p class="muted small">Аварийный запас на ${P.reserve_days} дн. включён в список.</p>`;
     } else if (tab === 'pack') {
-      body = menu.days.map((d, i) => `<h3>День ${i + 1}</h3>` + M4.map(m => { const e = d[m]; if (!e?.items?.length) return ''; const sp = m === 'l' ? Math.max(1, +trip.prefs.lunchSplit || 1) : 1, times = ['11:00', '13:30', '16:00'];
+      body = menu.days.map((d, i) => `<h3>День ${i + 1}</h3>` + mealsOf(trip, P).map(sl => { const m = sl.type, e = d[sl.id]; if (!e?.items?.length) return ''; const sp = m === 'l' ? Math.max(1, +trip.prefs.lunchSplit || 1) : 1, times = ['11:00', '13:30', '16:00'];
         const part = k => e.items.map(it => `${esc(byId(it.pid)?.name)} ${Math.round(it.g / sp / 5) * 5 || 5} г`).join(', ');
-        return `<div class="pk"><b>${MEALS[m]}</b> · ${esc(e.name || '')}${sp > 1 ? ` <span class="muted">· ${sp} пакета(ов) на человека-приём</span>` : ''}<br>${sp > 1 ? Array.from({ length: sp }, (_, k) => `<span class="muted"><b>Пакет ${k + 1} (${times[sp === 2 ? [0, 1][k] === 0 ? 0 : 2 : k]})</b>: ${part(k)}</span>`).join('<br>') : `<span class="muted">${e.items.map(it => `${esc(byId(it.pid)?.name)} ${it.g} г`).join(', ')}</span>`}</div>`; }).join('')).join('') + '<button class="btn" id="print">Печать этикеток</button>';
+        return `<div class="pk"><b>${esc(slotLabel(mealsOf(trip, P), sl.id))}</b> · ${esc(e.name || '')}${sp > 1 ? ` <span class="muted">· ${sp} пакета(ов) на человека-приём</span>` : ''}<br>${sp > 1 ? Array.from({ length: sp }, (_, k) => `<span class="muted"><b>Пакет ${k + 1} (${times[sp === 2 ? [0, 1][k] === 0 ? 0 : 2 : k]})</b>: ${part(k)}</span>`).join('<br>') : `<span class="muted">${e.items.map(it => `${esc(byId(it.pid)?.name)} ${it.g} г`).join(', ')}</span>`}</div>`; }).join('')).join('') + '<button class="btn" id="print">Печать этикеток</button>';
     } else if (tab === 'bags') {
       const W = weights(D), lim = p => (p.sex === 'F' ? trip.gear.maxF : trip.gear.maxM);
       body = `<p class="muted small">Вес рюкзака в начале каждого дня (личное снаряжение + доля общего + продукты и газ до ближайшей заброски). Продукты делятся по «Доле общего груза».</p>` + W.map(w => `<h3>${esc(w.p.name || 'Участник')} <span class="muted">· доля ${(w.sh * 100).toFixed(0)}%${lim(w.p) ? ` · лимит ${lim(w.p)} кг` : ''}</span></h3>
@@ -2970,7 +3031,7 @@ W — вес тела, L — вес рюкзака (меняется по дня
 Граммы = цель / калорийность меню (около {kcal100} ккал/100 г, потом считается по реальным продуктам). Ориентиры для сверки: {ref_hungry} г — голодно, {ref_std} г — стандарт, {ref_full} г — сытно.
 Аварийный запас: {reserve_days} дн.
 Вес рюкзака проверяется: личное снаряжение + доля общего + продукты до ближайшей заброски не больше лимита.`],
-  ['7. Меню и приёмы пищи', `Приёмы пищи делят ккал дня: завтрак {split_b}%, обед-перекус {split_l}%, ужин {split_d}%, перекус {split_s}% (в сумме 100%). Перекус добирает остаток дневной цели из сладкого, орехов и сухофруктов набора.
+  ['7. Меню и приёмы пищи', `Приёмы пищи в дне — список (по умолчанию завтрак, перекус, обед, перекус, ужин; его можно менять в «Питание и заброски»). Каждый приём получает свою долю ккал дня: по умолчанию завтрак {split_b}%, перекус {split_s}%, обед-перекус {split_l}%, перекус {split_s}%, ужин {split_d}% (в сумме 100%). Перекус собирается из блюд-перекусов набора, а если их нет — из сладкого и орехов набора на свою долю. Минимумы приёмов не урезаются: если из-за них день вышел за цель, в предупреждениях указан перебор.
 Меню собирается только из готовых блюд выбранного набора меню и только из продуктов выбранного набора продуктов. Приложение не придумывает сочетания само: граммы блюда на человека масштабируются под потребность в пределах «мин / макс» каждого продукта.
 Минимум на приём пищи (на человека): завтрак {min_b} ккал, обед-перекус {min_l} ккал и {min_l_g} г, ужин {min_d} ккал. Ниже минимума порция растёт в пределах «макс», а если и так мало — блюдо не используется.
 Холодный обед-перекус обязан содержать три группы: углеводная основа ≥ {lunch_carb} г, белок/жир ≥ {lunch_prot} г, сладкое ≥ {lunch_sweet} г.
@@ -3051,7 +3112,7 @@ const views = {
           <div class="ctl"><input type="number" inputmode="decimal" step="any" data-p="${p.id}" value="${getParam(p.id)}"><span class="muted unit">${esc(p.unit)}</span>
           ${isChanged(p.id) ? `<button class="mini" data-reset="${p.id}">По умолчанию: ${p.def}</button>` : ''}</div></div>
           ${p.hint ? `<p class="help" id="help-${p.id}" hidden>${esc(p.hint)}</p>` : ''}`).join('')}
-        ${group === 'menu' ? (() => { const sum = ['split_b', 'split_l', 'split_d', 'split_s'].reduce((a, k) => a + getParam(k), 0); return `<p class="${sum === 100 ? 'good' : 'warnmsg'}"><b>Сумма долей ккал: ${sum}%</b>${sum === 100 ? '' : ' — должна быть 100%, иначе меню будет недобирать или перебирать'}</p>`; })() : ''}
+        ${group === 'menu' ? (() => { const sum = getParam('split_b') + getParam('split_l') + getParam('split_d') + 2 * getParam('split_s'); return `<p class="${sum === 100 ? 'good' : 'warnmsg'}"><b>Сумма долей ккал (завтрак + обед + ужин + 2 перекуса): ${sum}%</b>${sum === 100 ? '' : ' — должна быть 100%, иначе меню будет недобирать или перебирать'}</p>`; })() : ''}
         <button class="btn ghost" id="resetg">Сбросить группу</button>`,
       bind(root) {
         root.querySelectorAll('[data-grp]').forEach(b => b.onclick = () => ctx.go('params', b.dataset.grp, true));
