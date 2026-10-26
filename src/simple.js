@@ -14,6 +14,7 @@ export function virtualGroup(s, d) {
 // Дополняет сохранённый поход полями, которых в старых данных нет
 export function ensureTrip(t) {
   t.simple = { ...defaultSimple(), ...(t.simple || {}) };
+  t.buyers ||= []; t.buyDept ||= {}; t.buyItem ||= {};
   t.prefs ||= {}; if (!('kcalGoal' in t.prefs)) t.prefs.kcalGoal = null; if (t.prefs.restPct == null) t.prefs.restPct = 80;
   return t;
 }

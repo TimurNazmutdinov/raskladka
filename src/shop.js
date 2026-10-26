@@ -3,6 +3,8 @@ import { allParams, opts, saveOpts } from './params.js';
 import { SHOP_DEPT } from './products.js';
 import { MEALS, allowed } from './menu.js';
 import { mealsOf, slotLabel } from './meals.js';
+import { addBuyer, removeBuyer, assign, buyerOf, splitByBuyer, buyerText, buyerCsv, ensureBuyers } from './buyers.js';
+import { groupNotes } from './summary.js';
 import { products, byId } from './pstore.js';
 import { getTrip, saveTrip, setTrip, newTrip } from './trip.js';
 import { ensure, menuGrams, exportData } from './calcview.js';
@@ -75,7 +77,7 @@ export const views = {
     const D = shopData();
     if (!D) return { html: '<h2>Покупки</h2><p class="empty">Список появится после составления меню: нужен набор продуктов и набор меню.</p>' };
     const tab = ctx.state.shopTab || 'list', { trip, calc, menu, P, rows, n } = D, b = bought(trip);
-    const tabs = [['list', 'Список'], ['pack', 'Фасовка'], ['bags', 'Рюкзаки'], ['fuel', 'Топливо'], ['exp', 'Экспорт']];
+    const tabs = [['list', 'Список'], ['buy', 'Закупщики'], ['pack', 'Фасовка'], ['bags', 'Рюкзаки'], ['fuel', 'Топливо'], ['exp', 'Экспорт']];
     let body = '';
     if (tab === 'list') {
       const sum = rows.reduce((s, r) => s + r.price, 0);
@@ -83,6 +85,20 @@ export const views = {
         ${DEPT_ORDER.map(dep => { const r = rows.filter(x => x.dept === dep).sort((a, b) => a.p.name.localeCompare(b.p.name)); return r.length ? `<h3>${dep}</h3><ul class="list shop">${r.map(x => `<li class="${b[x.p.id] ? 'done' : ''}"><label><input type="checkbox" data-buy="${x.p.id}"${b[x.p.id] ? ' checked' : ''}><span><b>${esc(x.p.name)}</b><br><span class="muted small">нужно ${n0(x.total)} г${x.reserve ? ` (в т.ч. запас ${n0(x.reserve)})` : ''}${x.packs && opts.round ? ` → ${x.packs} × ${x.p.pack} г = ${n0(x.buy)} г` : ''}</span></span></label>${x.price ? `<span>${n0(x.price)} ${opts.currency}</span>` : ''}</li>`).join('')}</ul>` : ''; }).join('')}
         ${sum ? `<p><b>Итого ${n0(sum)} ${opts.currency}</b> · с человека ${n0(sum / n)} ${opts.currency}</p>` : '<p class="muted small">Цены не заданы. Их можно указать в карточке продукта.</p>'}
         <p class="muted small">Аварийный запас на ${P.reserve_days} дн. включён в список.</p>`;
+    } else if (tab === 'buy') {
+      ensureBuyers(trip);
+      const opt = sel => '<option value="">не назначено</option>' + trip.buyers.map(x => '<option value="' + x.id + '"' + (x.id === sel ? ' selected' : '') + '>' + esc(x.name) + '</option>').join(''), sp = splitByBuyer(trip, rows);
+      const info = { trip, n, days: calc.summary.days, currency: opts.currency, round: opts.round, notes: groupNotes(trip), order: DEPT_ORDER };
+      const card = (g, i) => '<section class="dcard"><div class="dh"><b>' + (g.buyer ? esc(g.buyer.name) : 'Не назначено') + '</b><span class="muted">' + (g.buyer?.note ? esc(g.buyer.note) + ' · ' : '') + g.rows.length + ' поз.' + (g.sum ? ' · ≈ ' + n0(g.sum) + ' ' + opts.currency : '') + '</span></div>'
+        + (g.rows.length ? DEPT_ORDER.map(dep => { const r = g.rows.filter(x => x.dept === dep); return r.length ? '<p class="muted small"><b>' + dep + '</b></p><ul class="list">' + r.sort((a, b) => a.p.name.localeCompare(b.p.name)).map(x => '<li><span>' + esc(x.p.name) + '</span><b>' + (x.packs && opts.round ? x.packs + ' уп. · ' + n0(x.buy) + ' г' : n0(x.total) + ' г') + '</b></li>').join('') + '</ul>' : ''; }).join('') : '<p class="empty">Пусто.</p>')
+        + (g.rows.length ? '<div class="btnrow"><button class="btn ghost" data-bcopy="' + i + '">Скопировать текстом</button><button class="btn ghost" data-bcsv="' + i + '">CSV</button></div>' : '') + '</section>';
+      const all = [...sp.groups, sp.none];
+      body = '<h3>Закупщики</h3>' + (trip.buyers.map(x => '<div class="fld"><input data-bn="' + x.id + '" value="' + esc(x.name) + '" placeholder="Имя" style="width:140px"> <input data-bt="' + x.id + '" value="' + esc(x.note || '') + '" placeholder="Магазин, рынок, срок" style="width:200px"> <button class="mini" data-bx="' + x.id + '">Удалить</button></div>').join('') || '<p class="empty">Закупщиков пока нет: все покупки в общем списке.</p>')
+        + '<div class="btnrow"><button class="btn" id="addbuyer">Добавить закупщика</button></div>'
+        + (trip.buyers.length ? '<h3>Кто что покупает</h3><p class="muted small">Назначьте отдел целиком, а отдельные продукты можно передать другому закупщику.</p><div class="tbl"><table class="dtable">' + DEPT_ORDER.filter(dep => rows.some(r => r.dept === dep)).map(dep => '<tr><td>' + dep + '</td><td><select data-bd="' + esc(dep) + '">' + opt(trip.buyDept[dep]) + '</select></td></tr>').join('') + '</table></div>'
+          + '<details><summary>Отдельные продукты (исключения)</summary><div class="tbl"><table class="dtable">' + rows.slice().sort((a, b) => a.p.name.localeCompare(b.p.name)).map(r => '<tr><td>' + esc(r.p.name) + ' <span class="muted small">' + r.dept + '</span></td><td><select data-bi="' + r.p.id + '"><option value="">как у отдела</option>' + trip.buyers.map(x => '<option value="' + x.id + '"' + (trip.buyItem[r.p.id] === x.id ? ' selected' : '') + '>' + esc(x.name) + '</option>').join('') + '</select></td></tr>').join('') + '</table></div></details>'
+          + '<h3>Листы закупщиков</h3>' + (sp.none.rows.length ? '<p class="warnmsg">Не назначено позиций: ' + sp.none.rows.length + '</p>' : '') + all.filter(g => g.buyer || g.rows.length).map((g, i) => card(g, all.indexOf(g))).join('') + '<div class="btnrow"><button class="btn" id="ballcopy">Все листы текстом</button></div>' : '');
+      ctx.buyerData = { all, info };
     } else if (tab === 'pack') {
       body = menu.days.map((d, i) => `<h3>День ${i + 1}</h3>` + mealsOf(trip, P).map(sl => { const m = sl.type, e = d[sl.id]; if (!e?.items?.length) return ''; const sp = m === 'l' ? Math.max(1, +trip.prefs.lunchSplit || 1) : 1, times = ['11:00', '13:30', '16:00'];
         const part = k => e.items.map(it => `${esc(byId(it.pid)?.name)} ${Math.round(it.g / sp / 5) * 5 || 5} г`).join(', ');
@@ -108,6 +124,18 @@ export const views = {
         root.querySelectorAll('[data-st]').forEach(x => x.onclick = () => { ctx.state.shopTab = x.dataset.st; ctx.rerender(); });
         root.querySelector('#big')?.addEventListener('change', e => { ctx.state.big = e.target.checked; ctx.rerender(); });
         root.querySelectorAll('[data-buy]').forEach(c => c.onchange = () => { b[c.dataset.buy] = c.checked; saveTrip(); ctx.rerender(); });
+        if (tab === 'buy') {
+          const rer = () => { saveTrip(); ctx.rerender(); }, bd = ctx.buyerData, say = (btn, ok) => { btn.textContent = ok ? 'Скопировано' : 'Не удалось'; };
+          root.querySelector('#addbuyer').onclick = () => { addBuyer(trip); rer(); };
+          root.querySelectorAll('[data-bx]').forEach(x => x.onclick = () => { removeBuyer(trip, x.dataset.bx); rer(); });
+          root.querySelectorAll('[data-bn]').forEach(x => x.onchange = () => { const b = trip.buyers.find(y => y.id === x.dataset.bn); if (b) { b.name = x.value.trim() || b.name; rer(); } });
+          root.querySelectorAll('[data-bt]').forEach(x => x.onchange = () => { const b = trip.buyers.find(y => y.id === x.dataset.bt); if (b) { b.note = x.value; rer(); } });
+          root.querySelectorAll('[data-bd]').forEach(x => x.onchange = () => { assign(trip, 'dept', x.dataset.bd, x.value); rer(); });
+          root.querySelectorAll('[data-bi]').forEach(x => x.onchange = () => { assign(trip, 'item', x.dataset.bi, x.value); rer(); });
+          root.querySelectorAll('[data-bcopy]').forEach(x => x.onclick = async () => { try { await navigator.clipboard.writeText(buyerText(bd.all[+x.dataset.bcopy], bd.info)); say(x, true); } catch { download('zakupki.txt', buyerText(bd.all[+x.dataset.bcopy], bd.info), 'text/plain'); } });
+          root.querySelectorAll('[data-bcsv]').forEach(x => x.onclick = () => { const g = bd.all[+x.dataset.bcsv]; download('zakupki_' + (g.buyer?.name || 'не_назначено') + '.csv', buyerCsv(g), 'text/csv'); });
+          root.querySelector('#ballcopy')?.addEventListener('click', async e => { const t = bd.all.filter(g => g.rows.length).map(g => buyerText(g, bd.info)).join('\n\n----------\n\n'); try { await navigator.clipboard.writeText(t); say(e.target, true); } catch { download('zakupki.txt', t, 'text/plain'); } });
+        }
         root.querySelector('#print')?.addEventListener('click', () => window.print());
         root.querySelector('#xl')?.addEventListener('click', () => exportExcel(exportData()).catch(err => { root.querySelector('#msg').textContent = 'Не удалось выгрузить: ' + err.message; }));
         root.querySelector('#csv')?.addEventListener('click', () => download('raskladka.csv', csvExport(D), 'text/csv'));

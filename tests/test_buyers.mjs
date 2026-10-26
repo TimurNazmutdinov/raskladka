@@ -1,0 +1,25 @@
+import { ensureBuyers, addBuyer, removeBuyer, assign, buyerOf, splitByBuyer, buyerText, buyerCsv } from '../src/buyers.js';
+const ok = (n, c) => { console.log((c ? 'ok   ' : 'FAIL ') + n); if (!c) process.exitCode = 1; };
+const row = (id, name, dept, total, price = 0, pack = 500) => ({ p: { id, name, pack }, dept, total, buy: Math.ceil(total / pack) * pack, packs: Math.ceil(total / pack), price });
+const rows = [row('a', 'Гречка', 'Бакалея', 2000, 400), row('b', 'Лук', 'Овощи', 900, 150, 1000), row('c', 'Тушёнка', 'Мясо', 3000, 1200, 340), row('d', 'Рис', 'Бакалея', 1500, 300)];
+const t = ensureBuyers({ name: 'Тест', start: '2026-11-01' });
+ok('пустой поход: все не назначены', splitByBuyer(t, rows).none.rows.length === 4 && splitByBuyer(t, rows).groups.length === 0);
+const anna = addBuyer(t, 'Анна'), boris = addBuyer(t);
+ok('новые закупщики с разными id', anna.id !== boris.id && boris.name === 'Закупщик 2');
+assign(t, 'dept', 'Бакалея', anna.id); assign(t, 'dept', 'Овощи', boris.id);
+let s = splitByBuyer(t, rows);
+ok('отдел → закупщик', s.groups[0].rows.map(r => r.p.name).join() === 'Гречка,Рис' && s.groups[1].rows.map(r => r.p.name).join() === 'Лук');
+ok('не назначено: мясо', s.none.rows.length === 1 && s.none.rows[0].p.name === 'Тушёнка');
+assign(t, 'item', 'd', boris.id);
+s = splitByBuyer(t, rows);
+ok('исключение для продукта сильнее отдела', buyerOf(t, rows[3]) === boris.id && s.groups[0].rows.length === 1 && s.groups[1].rows.length === 2);
+ok('суммы по закупщикам', s.groups[0].sum === 400 && s.groups[1].sum === 450 && s.none.sum === 1200);
+assign(t, 'item', 'd', '');
+ok('снятие исключения возвращает отдел', buyerOf(t, rows[3]) === anna.id);
+const info = { trip: t, n: 12, days: 2, currency: '₸', round: true, notes: ['Есть вегетарианцы'], order: ['Овощи', 'Мясо', 'Бакалея'] };
+const txt = buyerText(splitByBuyer(t, rows).groups[0], info).replace(/\s/g, m => (m === '\n' ? m : ' ')); // в русской локали разряды отделены неразрывным пробелом
+ok('текст листа: закупщик, упаковки, итог, заметки', txt.includes('Закупщик: Анна') && txt.includes('4 уп. по 500 г (2 000 г)') && txt.includes('итого ≈ 700') && txt.includes('Есть вегетарианцы') && txt.includes('12 чел., 2 дн.'));
+ok('csv: заголовок и строки', buyerCsv(splitByBuyer(t, rows).groups[0]).split('\n').length === 3);
+removeBuyer(t, anna.id);
+s = splitByBuyer(t, rows);
+ok('удаление закупщика снимает назначения', t.buyers.length === 1 && !('Бакалея' in t.buyDept) && s.none.rows.length === 3);

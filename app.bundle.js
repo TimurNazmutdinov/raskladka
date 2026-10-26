@@ -909,6 +909,7 @@ function virtualGroup(s, d) {
 // Дополняет сохранённый поход полями, которых в старых данных нет
 function ensureTrip(t) {
   t.simple = { ...defaultSimple(), ...(t.simple || {}) };
+  t.buyers ||= []; t.buyDept ||= {}; t.buyItem ||= {};
   t.prefs ||= {}; if (!('kcalGoal' in t.prefs)) t.prefs.kcalGoal = null; if (t.prefs.restPct == null) t.prefs.restPct = 80;
   return t;
 }
@@ -2595,12 +2596,140 @@ const views = {
 
 return {activePlan, sets, sig, ensure, exportData, menuKcal, menuGrams, views};
 })();
+__m['buyers.js'] = (() => {
+// Закупщики: у похода может быть несколько. Продукт попадает к закупщику по исключению для позиции (buyItem) или по отделу (buyDept).
+// Список закупщиков — trip.buyers [{id, name, note}], назначения — trip.buyDept {отдел: id}, trip.buyItem {id продукта: id}.
+const ensureBuyers = t => { t.buyers ||= []; t.buyDept ||= {}; t.buyItem ||= {}; return t; };
+
+function addBuyer(t, name = '') {
+  ensureBuyers(t);
+  let k = t.buyers.length + 1; while (t.buyers.some(b => b.id === 'z' + k)) k++;
+  const b = { id: 'z' + k, name: name || `Закупщик ${t.buyers.length + 1}`, note: '' };
+  t.buyers.push(b); return b;
+}
+function removeBuyer(t, id) {
+  ensureBuyers(t); t.buyers = t.buyers.filter(b => b.id !== id);
+  for (const m of [t.buyDept, t.buyItem]) for (const k of Object.keys(m)) if (m[k] === id) delete m[k];
+}
+function assign(t, kind, key, id) { ensureBuyers(t); const m = kind === 'dept' ? t.buyDept : t.buyItem; if (id) m[key] = id; else delete m[key]; }
+
+// Закупщик строки списка покупок: сначала исключение для позиции, затем отдел; если закупщик удалён — не назначено
+function buyerOf(t, row) {
+  ensureBuyers(t);
+  const id = t.buyItem[row.p.id] ?? t.buyDept[row.dept] ?? null;
+  return id && t.buyers.some(b => b.id === id) ? id : null;
+}
+
+// rows — строки shopData (p, total, buy, packs, price, dept). Возвращает группы по закупщикам и «не назначено»
+function splitByBuyer(t, rows) {
+  ensureBuyers(t);
+  const groups = t.buyers.map(b => ({ buyer: b, rows: [], sum: 0 })), none = { buyer: null, rows: [], sum: 0 };
+  for (const r of rows) { const id = buyerOf(t, r), g = groups.find(x => x.buyer.id === id) || none; g.rows.push(r); g.sum += r.price || 0; }
+  return { groups, none };
+}
+
+const n0 = x => Math.round(x).toLocaleString('ru');
+const line = (r, round) => `  ${r.p.name} — ${r.packs && round ? `${r.packs} уп. по ${r.p.pack} г (${n0(r.buy)} г)` : `${n0(r.total)} г`}${r.price ? `, ≈ ${n0(r.price)}` : ''}`;
+// Текст листа закупщика. info: { trip, n, days, currency, round, notes, order (порядок отделов) }
+function buyerText(g, info) {
+  const t = info.trip, head = g.buyer ? `Закупщик: ${g.buyer.name}${g.buyer.note ? ` (${g.buyer.note})` : ''}` : 'Не назначено';
+  const out = [`${t.name || 'Поход'} — ${info.n} чел., ${info.days} дн.${t.start ? `, ${t.start}${t.end ? ' — ' + t.end : ''}` : ''}`, head, ''];
+  for (const dep of info.order) { const r = g.rows.filter(x => x.dept === dep); if (r.length) { out.push(dep + ':'); r.slice().sort((a, b) => a.p.name.localeCompare(b.p.name)).forEach(x => out.push(line(x, info.round))); } }
+  out.push('', `Позиций: ${g.rows.length}${g.sum ? `, итого ≈ ${n0(g.sum)} ${info.currency}` : ''}`);
+  if (info.notes?.length) out.push('', 'О группе:', ...info.notes.map(x => '  ' + x));
+  return out.join('\n');
+}
+const buyerCsv = g => '﻿Товар;Нужно, г;Упаковок;Купить, г;Цена;Отдел\n' + g.rows.map(r => [r.p.name, Math.round(r.total), r.packs ?? '', Math.round(r.buy), r.price ? Math.round(r.price) : '', r.dept].join(';')).join('\n');
+
+return {ensureBuyers, addBuyer, removeBuyer, assign, buyerOf, splitByBuyer, buyerText, buyerCsv};
+})();
+__m['summary.js'] = (() => {
+// Сводка расчёта: показатели, проверки и закупка по категориям. Чистые функции — данные берутся из расчёта, меню и списка покупок.
+const {itemsKcal, MEALS} = __m['menu.js'];
+const {mealsOf} = __m['meals.js'];
+const {CATS} = __m['products.js'];
+
+const CAT_RU = Object.fromEntries(CATS);
+const sum = (a, f) => a.reduce((s, x) => s + f(x), 0);
+
+// Заметки о группе (для сводки и листов закупщиков)
+const groupNotes = trip => [trip.simple?.on && trip.simple.veg ? 'Есть вегетарианцы' : '', trip.simple?.on && trip.simple.noEat ? `Не едят / аллергии: ${trip.simple.noEat}` : '', trip.simple?.on && trip.simple.notes ? trip.simple.notes : '',
+  trip.prefs?.likes ? `Любимые блюда: ${trip.prefs.likes}` : '', trip.prefs?.dislikes ? `Нелюбимые блюда: ${trip.prefs.dislikes}` : ''].filter(Boolean);
+
+// D: { trip, calc, menu, P, pset, rows (из shopData), currency }
+function buildSummary(D) {
+  const { trip, calc, menu, P, pset, rows, currency = '₸' } = D, S = calc.summary, n = S.n, days = S.days, prods = pset.items, byId = new Map(prods.map(p => [p.id, p]));
+  const slots = mealsOf(trip, P);
+  const cells = menu.days.flatMap(d => slots.map(s => ({ s, e: d[s.id] })));
+  const counted = cells.filter(c => !c.e?.personal), filled = counted.filter(c => c.e?.items?.length);
+  const items = menu.days.flatMap(d => Object.values(d).flatMap(e => (e?.items || []).filter(i => !i.skip)));
+  const factK = sum(menu.days, d => sum(Object.values(d), e => itemsKcal(e?.items || [], prods))) / n / days;
+  const factP = sum(items, i => (byId.get(i.pid)?.p || 0) * i.g / 100) / n / days;
+  const goalK = S.kcalPerPersonDay, goalP = sum(calc.days, d => d.mac.p) / calc.days.length;
+  const buyG = sum(rows, r => r.buy), cost = sum(rows, r => r.price), reserveG = sum(rows, r => r.reserve);
+  const ratio = goalK ? factK / goalK : 0, okK = ratio >= 0.9 && ratio <= 1.1;
+  const noPrice = rows.filter(r => !r.p.price), noPack = rows.filter(r => !r.p.pack), noKcal = rows.filter(r => r.p.kcal == null);
+  const noRecipe = counted.filter(c => c.e && !c.e.empty && c.e.name && !c.e.items?.length);
+  const personal = cells.filter(c => c.e?.personal).length;
+
+  const indicators = [
+    { label: 'Участников, чел.', value: n },
+    { label: 'Дней, суток', value: days },
+    { label: 'Цель энергии, ккал/чел/день', value: Math.round(goalK) },
+    { label: 'Факт энергии, ккал/чел/день', value: Math.round(factK) },
+    { label: 'Цель белка, г/чел/день', value: Math.round(goalP) },
+    { label: 'Факт белка, г/чел/день', value: Math.round(factP) },
+    { label: 'Вес закупки, кг', value: +(buyG / 1000).toFixed(1) },
+    { label: 'Вода, л/чел/день (оценка)', value: +(S.water / n / days).toFixed(1) },
+    { label: 'Топливо на поход, г', value: Math.round(S.fuel) },
+    { label: `Общая стоимость, ${currency}`, value: cost ? Math.round(cost) : null },
+    { label: `Стоимость, ${currency}/чел/день`, value: cost ? Math.round(cost / n / days) : null },
+    { label: 'Заполненных приёмов меню', value: `${filled.length} из ${counted.length}` },
+    { label: 'Статус калорий', value: okK ? 'OK' : 'Проверить', status: okK ? 'ok' : 'warn', note: `факт ${Math.round(ratio * 100)}% от цели (допустимо 90–110%)` },
+  ];
+  const check = (label, bad, okText = 'OK') => ({ label, ok: !bad.length, text: bad.length ? `${bad.length}: ${bad.slice(0, 4).join(', ')}${bad.length > 4 ? '…' : ''}` : okText });
+  const checks = [
+    check('Все блюда имеют рецепт', noRecipe.map(c => c.e.name)),
+    check('Все продукты имеют цену', noPrice.map(r => r.p.name)),
+    check('Все упаковки заполнены', noPack.map(r => r.p.name)),
+    check('У всех продуктов есть КБЖУ', noKcal.map(r => r.p.name)),
+    { label: 'Меню не пустое', ok: filled.length > 0, text: filled.length ? 'OK' : 'нет ни одного приёма' },
+    { label: 'Резерв закупки', ok: true, text: `${P.reserve_days} дн. (≈ ${buyG ? Math.round(reserveG / Math.max(1, buyG - reserveG) * 100) : 0}% к рациону)` },
+  ];
+  if (personal) checks.push({ label: 'Приёмы «в личке»', ok: true, text: `${personal} (в раскладку не входят)` });
+  const warnings = menu.warnings || [];
+  if (warnings.length) checks.push({ label: 'Предупреждения меню', ok: false, text: `${warnings.length}: см. «Расчёт»` });
+
+  const cat = new Map();
+  rows.forEach(r => { const c = cat.get(r.p.cat) || { cat: r.p.cat, name: CAT_RU[r.p.cat] || r.p.cat, g: 0, cost: 0 }; c.g += r.buy; c.cost += r.price; cat.set(r.p.cat, c); });
+  const byCategory = CATS.map(([k]) => cat.get(k)).concat([...cat.values()].filter(c => !CAT_RU[c.cat])).filter(Boolean).map(c => ({ name: c.name, kg: +(c.g / 1000).toFixed(2), cost: c.cost ? Math.round(c.cost) : null }));
+  const notes = groupNotes(trip);
+  return { indicators, checks, byCategory, totalKg: +(buyG / 1000).toFixed(2), totalCost: cost ? Math.round(cost) : null, currency, notes, name: trip.name || 'Поход' };
+}
+
+// Строки для Excel и текста
+function summaryRows(s) {
+  const v = x => (x == null ? '' : x);
+  return [
+    { name: 'Сводка', rows: [['Сводка расчёта: ' + s.name], [], ['Показатель', 'Значение', 'Примечание'], ...s.indicators.map(i => [i.label, v(i.value), i.note || '']), [], ['Проверка', 'Результат'], ...s.checks.map(c => [c.label, c.text]), ...(s.notes.length ? [[], ['Заметки группы'], ...s.notes.map(x => [x])] : [])] },
+    { name: 'Закупка по категориям', rows: [['Категория', 'Купить, кг', `Стоимость, ${s.currency}`], ...s.byCategory.map(c => [c.name, c.kg, v(c.cost)]), ['Итого', s.totalKg, v(s.totalCost)]] },
+  ];
+}
+function summaryText(s) {
+  const f = x => (typeof x === 'number' ? x.toLocaleString('ru') : x ?? '—');
+  return [`Сводка расчёта: ${s.name}`, '', ...s.indicators.map(i => `${i.label}: ${f(i.value)}${i.note ? ` (${i.note})` : ''}`), '', 'Проверки:', ...s.checks.map(c => `  ${c.ok ? '✓' : '✗'} ${c.label}: ${c.text}`), '', 'Закупка по категориям:', ...s.byCategory.map(c => `  ${c.name}: ${f(c.kg)} кг${c.cost != null ? `, ${f(c.cost)} ${s.currency}` : ''}`), `  Итого: ${f(s.totalKg)} кг${s.totalCost != null ? `, ${f(s.totalCost)} ${s.currency}` : ''}`, ...(s.notes.length ? ['', 'Заметки группы:', ...s.notes.map(x => '  ' + x)] : [])].join('\n');
+}
+
+return {groupNotes, buildSummary, summaryRows, summaryText};
+})();
 __m['shop.js'] = (() => {
 // Вкладка «Покупки»: список, фасовка, рюкзаки, топливо и вода, экспорт.
 const {allParams, opts, saveOpts} = __m['params.js'];
 const {SHOP_DEPT} = __m['products.js'];
 const {MEALS, allowed} = __m['menu.js'];
 const {mealsOf, slotLabel} = __m['meals.js'];
+const {addBuyer, removeBuyer, assign, buyerOf, splitByBuyer, buyerText, buyerCsv, ensureBuyers} = __m['buyers.js'];
+const {groupNotes} = __m['summary.js'];
 const {products, byId} = __m['pstore.js'];
 const {getTrip, saveTrip, setTrip, newTrip} = __m['trip.js'];
 const {ensure, menuGrams, exportData} = __m['calcview.js'];
@@ -2673,7 +2802,7 @@ const views = {
     const D = shopData();
     if (!D) return { html: '<h2>Покупки</h2><p class="empty">Список появится после составления меню: нужен набор продуктов и набор меню.</p>' };
     const tab = ctx.state.shopTab || 'list', { trip, calc, menu, P, rows, n } = D, b = bought(trip);
-    const tabs = [['list', 'Список'], ['pack', 'Фасовка'], ['bags', 'Рюкзаки'], ['fuel', 'Топливо'], ['exp', 'Экспорт']];
+    const tabs = [['list', 'Список'], ['buy', 'Закупщики'], ['pack', 'Фасовка'], ['bags', 'Рюкзаки'], ['fuel', 'Топливо'], ['exp', 'Экспорт']];
     let body = '';
     if (tab === 'list') {
       const sum = rows.reduce((s, r) => s + r.price, 0);
@@ -2681,6 +2810,20 @@ const views = {
         ${DEPT_ORDER.map(dep => { const r = rows.filter(x => x.dept === dep).sort((a, b) => a.p.name.localeCompare(b.p.name)); return r.length ? `<h3>${dep}</h3><ul class="list shop">${r.map(x => `<li class="${b[x.p.id] ? 'done' : ''}"><label><input type="checkbox" data-buy="${x.p.id}"${b[x.p.id] ? ' checked' : ''}><span><b>${esc(x.p.name)}</b><br><span class="muted small">нужно ${n0(x.total)} г${x.reserve ? ` (в т.ч. запас ${n0(x.reserve)})` : ''}${x.packs && opts.round ? ` → ${x.packs} × ${x.p.pack} г = ${n0(x.buy)} г` : ''}</span></span></label>${x.price ? `<span>${n0(x.price)} ${opts.currency}</span>` : ''}</li>`).join('')}</ul>` : ''; }).join('')}
         ${sum ? `<p><b>Итого ${n0(sum)} ${opts.currency}</b> · с человека ${n0(sum / n)} ${opts.currency}</p>` : '<p class="muted small">Цены не заданы. Их можно указать в карточке продукта.</p>'}
         <p class="muted small">Аварийный запас на ${P.reserve_days} дн. включён в список.</p>`;
+    } else if (tab === 'buy') {
+      ensureBuyers(trip);
+      const opt = sel => '<option value="">не назначено</option>' + trip.buyers.map(x => '<option value="' + x.id + '"' + (x.id === sel ? ' selected' : '') + '>' + esc(x.name) + '</option>').join(''), sp = splitByBuyer(trip, rows);
+      const info = { trip, n, days: calc.summary.days, currency: opts.currency, round: opts.round, notes: groupNotes(trip), order: DEPT_ORDER };
+      const card = (g, i) => '<section class="dcard"><div class="dh"><b>' + (g.buyer ? esc(g.buyer.name) : 'Не назначено') + '</b><span class="muted">' + (g.buyer?.note ? esc(g.buyer.note) + ' · ' : '') + g.rows.length + ' поз.' + (g.sum ? ' · ≈ ' + n0(g.sum) + ' ' + opts.currency : '') + '</span></div>'
+        + (g.rows.length ? DEPT_ORDER.map(dep => { const r = g.rows.filter(x => x.dept === dep); return r.length ? '<p class="muted small"><b>' + dep + '</b></p><ul class="list">' + r.sort((a, b) => a.p.name.localeCompare(b.p.name)).map(x => '<li><span>' + esc(x.p.name) + '</span><b>' + (x.packs && opts.round ? x.packs + ' уп. · ' + n0(x.buy) + ' г' : n0(x.total) + ' г') + '</b></li>').join('') + '</ul>' : ''; }).join('') : '<p class="empty">Пусто.</p>')
+        + (g.rows.length ? '<div class="btnrow"><button class="btn ghost" data-bcopy="' + i + '">Скопировать текстом</button><button class="btn ghost" data-bcsv="' + i + '">CSV</button></div>' : '') + '</section>';
+      const all = [...sp.groups, sp.none];
+      body = '<h3>Закупщики</h3>' + (trip.buyers.map(x => '<div class="fld"><input data-bn="' + x.id + '" value="' + esc(x.name) + '" placeholder="Имя" style="width:140px"> <input data-bt="' + x.id + '" value="' + esc(x.note || '') + '" placeholder="Магазин, рынок, срок" style="width:200px"> <button class="mini" data-bx="' + x.id + '">Удалить</button></div>').join('') || '<p class="empty">Закупщиков пока нет: все покупки в общем списке.</p>')
+        + '<div class="btnrow"><button class="btn" id="addbuyer">Добавить закупщика</button></div>'
+        + (trip.buyers.length ? '<h3>Кто что покупает</h3><p class="muted small">Назначьте отдел целиком, а отдельные продукты можно передать другому закупщику.</p><div class="tbl"><table class="dtable">' + DEPT_ORDER.filter(dep => rows.some(r => r.dept === dep)).map(dep => '<tr><td>' + dep + '</td><td><select data-bd="' + esc(dep) + '">' + opt(trip.buyDept[dep]) + '</select></td></tr>').join('') + '</table></div>'
+          + '<details><summary>Отдельные продукты (исключения)</summary><div class="tbl"><table class="dtable">' + rows.slice().sort((a, b) => a.p.name.localeCompare(b.p.name)).map(r => '<tr><td>' + esc(r.p.name) + ' <span class="muted small">' + r.dept + '</span></td><td><select data-bi="' + r.p.id + '"><option value="">как у отдела</option>' + trip.buyers.map(x => '<option value="' + x.id + '"' + (trip.buyItem[r.p.id] === x.id ? ' selected' : '') + '>' + esc(x.name) + '</option>').join('') + '</select></td></tr>').join('') + '</table></div></details>'
+          + '<h3>Листы закупщиков</h3>' + (sp.none.rows.length ? '<p class="warnmsg">Не назначено позиций: ' + sp.none.rows.length + '</p>' : '') + all.filter(g => g.buyer || g.rows.length).map((g, i) => card(g, all.indexOf(g))).join('') + '<div class="btnrow"><button class="btn" id="ballcopy">Все листы текстом</button></div>' : '');
+      ctx.buyerData = { all, info };
     } else if (tab === 'pack') {
       body = menu.days.map((d, i) => `<h3>День ${i + 1}</h3>` + mealsOf(trip, P).map(sl => { const m = sl.type, e = d[sl.id]; if (!e?.items?.length) return ''; const sp = m === 'l' ? Math.max(1, +trip.prefs.lunchSplit || 1) : 1, times = ['11:00', '13:30', '16:00'];
         const part = k => e.items.map(it => `${esc(byId(it.pid)?.name)} ${Math.round(it.g / sp / 5) * 5 || 5} г`).join(', ');
@@ -2706,6 +2849,18 @@ const views = {
         root.querySelectorAll('[data-st]').forEach(x => x.onclick = () => { ctx.state.shopTab = x.dataset.st; ctx.rerender(); });
         root.querySelector('#big')?.addEventListener('change', e => { ctx.state.big = e.target.checked; ctx.rerender(); });
         root.querySelectorAll('[data-buy]').forEach(c => c.onchange = () => { b[c.dataset.buy] = c.checked; saveTrip(); ctx.rerender(); });
+        if (tab === 'buy') {
+          const rer = () => { saveTrip(); ctx.rerender(); }, bd = ctx.buyerData, say = (btn, ok) => { btn.textContent = ok ? 'Скопировано' : 'Не удалось'; };
+          root.querySelector('#addbuyer').onclick = () => { addBuyer(trip); rer(); };
+          root.querySelectorAll('[data-bx]').forEach(x => x.onclick = () => { removeBuyer(trip, x.dataset.bx); rer(); });
+          root.querySelectorAll('[data-bn]').forEach(x => x.onchange = () => { const b = trip.buyers.find(y => y.id === x.dataset.bn); if (b) { b.name = x.value.trim() || b.name; rer(); } });
+          root.querySelectorAll('[data-bt]').forEach(x => x.onchange = () => { const b = trip.buyers.find(y => y.id === x.dataset.bt); if (b) { b.note = x.value; rer(); } });
+          root.querySelectorAll('[data-bd]').forEach(x => x.onchange = () => { assign(trip, 'dept', x.dataset.bd, x.value); rer(); });
+          root.querySelectorAll('[data-bi]').forEach(x => x.onchange = () => { assign(trip, 'item', x.dataset.bi, x.value); rer(); });
+          root.querySelectorAll('[data-bcopy]').forEach(x => x.onclick = async () => { try { await navigator.clipboard.writeText(buyerText(bd.all[+x.dataset.bcopy], bd.info)); say(x, true); } catch { download('zakupki.txt', buyerText(bd.all[+x.dataset.bcopy], bd.info), 'text/plain'); } });
+          root.querySelectorAll('[data-bcsv]').forEach(x => x.onclick = () => { const g = bd.all[+x.dataset.bcsv]; download('zakupki_' + (g.buyer?.name || 'не_назначено') + '.csv', buyerCsv(g), 'text/csv'); });
+          root.querySelector('#ballcopy')?.addEventListener('click', async e => { const t = bd.all.filter(g => g.rows.length).map(g => buyerText(g, bd.info)).join('\n\n----------\n\n'); try { await navigator.clipboard.writeText(t); say(e.target, true); } catch { download('zakupki.txt', t, 'text/plain'); } });
+        }
         root.querySelector('#print')?.addEventListener('click', () => window.print());
         root.querySelector('#xl')?.addEventListener('click', () => exportExcel(exportData()).catch(err => { root.querySelector('#msg').textContent = 'Не удалось выгрузить: ' + err.message; }));
         root.querySelector('#csv')?.addEventListener('click', () => download('raskladka.csv', csvExport(D), 'text/csv'));
@@ -2723,82 +2878,6 @@ const views = {
 };
 
 return {shopData, views};
-})();
-__m['summary.js'] = (() => {
-// Сводка расчёта: показатели, проверки и закупка по категориям. Чистые функции — данные берутся из расчёта, меню и списка покупок.
-const {itemsKcal, MEALS} = __m['menu.js'];
-const {mealsOf} = __m['meals.js'];
-const {CATS} = __m['products.js'];
-
-const CAT_RU = Object.fromEntries(CATS);
-const sum = (a, f) => a.reduce((s, x) => s + f(x), 0);
-
-// D: { trip, calc, menu, P, pset, rows (из shopData), currency }
-function buildSummary(D) {
-  const { trip, calc, menu, P, pset, rows, currency = '₸' } = D, S = calc.summary, n = S.n, days = S.days, prods = pset.items, byId = new Map(prods.map(p => [p.id, p]));
-  const slots = mealsOf(trip, P);
-  const cells = menu.days.flatMap(d => slots.map(s => ({ s, e: d[s.id] })));
-  const counted = cells.filter(c => !c.e?.personal), filled = counted.filter(c => c.e?.items?.length);
-  const items = menu.days.flatMap(d => Object.values(d).flatMap(e => (e?.items || []).filter(i => !i.skip)));
-  const factK = sum(menu.days, d => sum(Object.values(d), e => itemsKcal(e?.items || [], prods))) / n / days;
-  const factP = sum(items, i => (byId.get(i.pid)?.p || 0) * i.g / 100) / n / days;
-  const goalK = S.kcalPerPersonDay, goalP = sum(calc.days, d => d.mac.p) / calc.days.length;
-  const buyG = sum(rows, r => r.buy), cost = sum(rows, r => r.price), reserveG = sum(rows, r => r.reserve);
-  const ratio = goalK ? factK / goalK : 0, okK = ratio >= 0.9 && ratio <= 1.1;
-  const noPrice = rows.filter(r => !r.p.price), noPack = rows.filter(r => !r.p.pack), noKcal = rows.filter(r => r.p.kcal == null);
-  const noRecipe = counted.filter(c => c.e && !c.e.empty && c.e.name && !c.e.items?.length);
-  const personal = cells.filter(c => c.e?.personal).length;
-
-  const indicators = [
-    { label: 'Участников, чел.', value: n },
-    { label: 'Дней, суток', value: days },
-    { label: 'Цель энергии, ккал/чел/день', value: Math.round(goalK) },
-    { label: 'Факт энергии, ккал/чел/день', value: Math.round(factK) },
-    { label: 'Цель белка, г/чел/день', value: Math.round(goalP) },
-    { label: 'Факт белка, г/чел/день', value: Math.round(factP) },
-    { label: 'Вес закупки, кг', value: +(buyG / 1000).toFixed(1) },
-    { label: 'Вода, л/чел/день (оценка)', value: +(S.water / n / days).toFixed(1) },
-    { label: 'Топливо на поход, г', value: Math.round(S.fuel) },
-    { label: `Общая стоимость, ${currency}`, value: cost ? Math.round(cost) : null },
-    { label: `Стоимость, ${currency}/чел/день`, value: cost ? Math.round(cost / n / days) : null },
-    { label: 'Заполненных приёмов меню', value: `${filled.length} из ${counted.length}` },
-    { label: 'Статус калорий', value: okK ? 'OK' : 'Проверить', status: okK ? 'ok' : 'warn', note: `факт ${Math.round(ratio * 100)}% от цели (допустимо 90–110%)` },
-  ];
-  const check = (label, bad, okText = 'OK') => ({ label, ok: !bad.length, text: bad.length ? `${bad.length}: ${bad.slice(0, 4).join(', ')}${bad.length > 4 ? '…' : ''}` : okText });
-  const checks = [
-    check('Все блюда имеют рецепт', noRecipe.map(c => c.e.name)),
-    check('Все продукты имеют цену', noPrice.map(r => r.p.name)),
-    check('Все упаковки заполнены', noPack.map(r => r.p.name)),
-    check('У всех продуктов есть КБЖУ', noKcal.map(r => r.p.name)),
-    { label: 'Меню не пустое', ok: filled.length > 0, text: filled.length ? 'OK' : 'нет ни одного приёма' },
-    { label: 'Резерв закупки', ok: true, text: `${P.reserve_days} дн. (≈ ${buyG ? Math.round(reserveG / Math.max(1, buyG - reserveG) * 100) : 0}% к рациону)` },
-  ];
-  if (personal) checks.push({ label: 'Приёмы «в личке»', ok: true, text: `${personal} (в раскладку не входят)` });
-  const warnings = menu.warnings || [];
-  if (warnings.length) checks.push({ label: 'Предупреждения меню', ok: false, text: `${warnings.length}: см. «Расчёт»` });
-
-  const cat = new Map();
-  rows.forEach(r => { const c = cat.get(r.p.cat) || { cat: r.p.cat, name: CAT_RU[r.p.cat] || r.p.cat, g: 0, cost: 0 }; c.g += r.buy; c.cost += r.price; cat.set(r.p.cat, c); });
-  const byCategory = CATS.map(([k]) => cat.get(k)).concat([...cat.values()].filter(c => !CAT_RU[c.cat])).filter(Boolean).map(c => ({ name: c.name, kg: +(c.g / 1000).toFixed(2), cost: c.cost ? Math.round(c.cost) : null }));
-  const notes = [trip.simple?.on && trip.simple.veg ? 'Есть вегетарианцы' : '', trip.simple?.on && trip.simple.noEat ? `Не едят / аллергии: ${trip.simple.noEat}` : '', trip.simple?.on && trip.simple.notes ? trip.simple.notes : '',
-    trip.prefs?.likes ? `Любимые блюда: ${trip.prefs.likes}` : '', trip.prefs?.dislikes ? `Нелюбимые блюда: ${trip.prefs.dislikes}` : ''].filter(Boolean);
-  return { indicators, checks, byCategory, totalKg: +(buyG / 1000).toFixed(2), totalCost: cost ? Math.round(cost) : null, currency, notes, name: trip.name || 'Поход' };
-}
-
-// Строки для Excel и текста
-function summaryRows(s) {
-  const v = x => (x == null ? '' : x);
-  return [
-    { name: 'Сводка', rows: [['Сводка расчёта: ' + s.name], [], ['Показатель', 'Значение', 'Примечание'], ...s.indicators.map(i => [i.label, v(i.value), i.note || '']), [], ['Проверка', 'Результат'], ...s.checks.map(c => [c.label, c.text]), ...(s.notes.length ? [[], ['Заметки группы'], ...s.notes.map(x => [x])] : [])] },
-    { name: 'Закупка по категориям', rows: [['Категория', 'Купить, кг', `Стоимость, ${s.currency}`], ...s.byCategory.map(c => [c.name, c.kg, v(c.cost)]), ['Итого', s.totalKg, v(s.totalCost)]] },
-  ];
-}
-function summaryText(s) {
-  const f = x => (typeof x === 'number' ? x.toLocaleString('ru') : x ?? '—');
-  return [`Сводка расчёта: ${s.name}`, '', ...s.indicators.map(i => `${i.label}: ${f(i.value)}${i.note ? ` (${i.note})` : ''}`), '', 'Проверки:', ...s.checks.map(c => `  ${c.ok ? '✓' : '✗'} ${c.label}: ${c.text}`), '', 'Закупка по категориям:', ...s.byCategory.map(c => `  ${c.name}: ${f(c.kg)} кг${c.cost != null ? `, ${f(c.cost)} ${s.currency}` : ''}`), `  Итого: ${f(s.totalKg)} кг${s.totalCost != null ? `, ${f(s.totalCost)} ${s.currency}` : ''}`, ...(s.notes.length ? ['', 'Заметки группы:', ...s.notes.map(x => '  ' + x)] : [])].join('\n');
-}
-
-return {buildSummary, summaryRows, summaryText};
 })();
 __m['summaryview.js'] = (() => {
 // Экран «Сводка расчёта»: показатели, проверки, закупка по категориям; выгрузка в Excel и копирование текстом.

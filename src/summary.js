@@ -6,6 +6,10 @@ import { CATS } from './products.js';
 const CAT_RU = Object.fromEntries(CATS);
 const sum = (a, f) => a.reduce((s, x) => s + f(x), 0);
 
+// Заметки о группе (для сводки и листов закупщиков)
+export const groupNotes = trip => [trip.simple?.on && trip.simple.veg ? 'Есть вегетарианцы' : '', trip.simple?.on && trip.simple.noEat ? `Не едят / аллергии: ${trip.simple.noEat}` : '', trip.simple?.on && trip.simple.notes ? trip.simple.notes : '',
+  trip.prefs?.likes ? `Любимые блюда: ${trip.prefs.likes}` : '', trip.prefs?.dislikes ? `Нелюбимые блюда: ${trip.prefs.dislikes}` : ''].filter(Boolean);
+
 // D: { trip, calc, menu, P, pset, rows (из shopData), currency }
 export function buildSummary(D) {
   const { trip, calc, menu, P, pset, rows, currency = '₸' } = D, S = calc.summary, n = S.n, days = S.days, prods = pset.items, byId = new Map(prods.map(p => [p.id, p]));
@@ -53,8 +57,7 @@ export function buildSummary(D) {
   const cat = new Map();
   rows.forEach(r => { const c = cat.get(r.p.cat) || { cat: r.p.cat, name: CAT_RU[r.p.cat] || r.p.cat, g: 0, cost: 0 }; c.g += r.buy; c.cost += r.price; cat.set(r.p.cat, c); });
   const byCategory = CATS.map(([k]) => cat.get(k)).concat([...cat.values()].filter(c => !CAT_RU[c.cat])).filter(Boolean).map(c => ({ name: c.name, kg: +(c.g / 1000).toFixed(2), cost: c.cost ? Math.round(c.cost) : null }));
-  const notes = [trip.simple?.on && trip.simple.veg ? 'Есть вегетарианцы' : '', trip.simple?.on && trip.simple.noEat ? `Не едят / аллергии: ${trip.simple.noEat}` : '', trip.simple?.on && trip.simple.notes ? trip.simple.notes : '',
-    trip.prefs?.likes ? `Любимые блюда: ${trip.prefs.likes}` : '', trip.prefs?.dislikes ? `Нелюбимые блюда: ${trip.prefs.dislikes}` : ''].filter(Boolean);
+  const notes = groupNotes(trip);
   return { indicators, checks, byCategory, totalKg: +(buyG / 1000).toFixed(2), totalCost: cost ? Math.round(cost) : null, currency, notes, name: trip.name || 'Поход' };
 }
 
