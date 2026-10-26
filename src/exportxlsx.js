@@ -41,7 +41,7 @@ function prepare(D) {
   const recipes = [], byKey = new Map(), names = new Map(), rows = [];
   menu.days.forEach((day, i) => mealsOf(trip, D.P).forEach(slot => {
     const m = slot.type, e = day[slot.id]; if (!e || !e.items?.length) return;
-    const ings = e.items.filter(it => it.pid || it.name).map(it => ({ pid: it.pid ?? it.name, name: it.name || prods.find(p => p.id === it.pid)?.name || '?', unit: it.unit || 'г', g: Math.round((it.perPortion ?? it.g / n) * 100) / 100 }));
+    const ings = e.items.filter(it => !it.water && (it.pid || it.name)).map(it => ({ pid: it.pid ?? it.name, name: it.name || prods.find(p => p.id === it.pid)?.name || '?', unit: it.unit || 'г', g: Math.round((it.perPortion ?? it.g / n) * 100) / 100 }));
     const base = (e.name || (m === 's' ? 'Перекус' : 'Блюдо')).trim(), key = base + '|' + ings.map(x => x.pid + ':' + x.g).join(',');
     let rec = byKey.get(key);
     if (!rec) {

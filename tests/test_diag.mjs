@@ -17,7 +17,7 @@ const ps = builtinProductSets()[0], ms = builtinMenuSets()[0];
 const withWater = { ...ms, dishes: ms.dishes.map(d => (d.meal === 'b' ? { ...d, ing: [{ name: 'Вода техническая', g: 300, min: 200, max: 400 }, ...d.ing] } : d)) };
 const a = run(mkTrip(2500), withWater, ps);
 ok('вода, которой нет в наборе, не отбрасывает блюдо', a.menu.days.every(d => d.b.items.length > 0 && !d.b.empty));
-ok('вода не попадает в продукты меню', a.menu.days.every(d => d.b.items.every(i => i.pid)));
+ok('вода — отдельная строка без продукта (не покупается)', a.menu.days.every(d => d.b.items.filter(i => i.water).length === 1 && d.b.items.filter(i => !i.water).every(i => i.pid)));
 ok('menuProblems не жалуется на воду', M.menuProblems(withWater, ps).length === 0);
 
 // настоящий недостающий продукт: блюдо не готовится, причина названа

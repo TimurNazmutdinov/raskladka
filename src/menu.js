@@ -44,18 +44,20 @@ const lim = (ing, k, def) => (ing[k] != null && ing[k] !== '' ? +ing[k] : def);
 // Масштабирование блюда под бюджет (ккал на человека). Возвращает {items(на 1 чел), kcal, grams} или null.
 // lunchP — параметры, если нужно соблюсти группы холодного обеда (порция растёт, пока правило не выполнится).
 function scale(dish, ctx, perPerson, salt, minKcal, lunchP = null) {
-  const base = dish.ing.map((ing, k) => ({ ing, p: pick(ing, ctx, salt + k) })).filter(b => b.p || !isWater(b.ing.name)); // воды нет в наборе продуктов — не причина отбросить блюдо
-  if (!base.length || base.some(b => !b.p)) return null;
+  // «Вода …» без продукта в наборе — вода на готовку: 0 ккал, не покупается и не носится в рюкзаке, но входит в рецепт, масштабируется с блюдом и считается в воде на готовку
+  let kk = 0; // номер продукта для выбора варианта «А|Б»: вода в рецепте не сдвигает выбор остальных продуктов
+  const base = dish.ing.map(ing => { if (isWater(ing.name)) return { ing, p: null, water: true }; const p = pick(ing, ctx, salt + kk++); return { ing, p }; }); // «Вода …» в рецепте — всегда вода на готовку, не покупной продукт
+  if (!base.length || base.some(b => !b.p && !b.water)) return null;
   const nong = b => b.ing.unit && b.ing.unit !== 'г';
   const ratio = (b, f) => { if (nong(b)) return 1; const g = b.ing.g; return Math.max(lim(b.ing, 'min', g * .7) / g, Math.min(lim(b.ing, 'max', g * 1.5) / g, f)); };
-  const kc = f => base.reduce((s, b) => s + (nong(b) ? 0 : b.ing.g * ratio(b, f) * (b.p.kcal || 0) / 100), 0);
-  const itemsAt = f => base.map(b => ({ pid: b.p.id, g: b.ing.g * ratio(b, f), cat: b.p.cat, tags: b.p.tags || '', name: b.p.name, unit: b.ing.unit || 'г', skip: nong(b) ? `единица «${b.ing.unit}», не граммы` : null }));
+  const kc = f => base.reduce((s, b) => s + (nong(b) || b.water ? 0 : b.ing.g * ratio(b, f) * (b.p.kcal || 0) / 100), 0);
+  const itemsAt = f => base.map(b => b.water ? ({ pid: null, g: b.ing.g * ratio(b, f), cat: 'water', tags: '', name: b.ing.name, unit: b.ing.unit || 'г', skip: null, water: true }) : ({ pid: b.p.id, g: b.ing.g * ratio(b, f), cat: b.p.cat, tags: b.p.tags || '', name: b.p.name, unit: b.ing.unit || 'г', skip: nong(b) ? `единица «${b.ing.unit}», не граммы` : null }));
   const k0 = kc(1) || 1; let f = Math.max(.3, Math.min(3, perPerson / k0)), guard = 0;
   const fail = () => (minKcal && kc(f) < minKcal) || (lunchP && !lunchOk(itemsAt(f), lunchP));
   while (fail() && f < 3 && guard++ < 80) f += .05;
   if (fail()) return null;
   const items = itemsAt(f);
-  return { items, kcal: kc(f), grams: items.reduce((s, i) => s + i.g, 0) };
+  return { items, kcal: kc(f), grams: items.filter(i => !i.water).reduce((s, i) => s + i.g, 0) }; // граммы — без воды (сухой вес)
 }
 const gsum = (items, cats, tag) => items.filter(i => cats.includes(i.cat) || (tag && i.tags.includes(tag))).reduce((s, i) => s + i.g, 0);
 // Правило обеда-перекуса: углеводная основа ≥50 г, белок/жир ≥40 г, сладкое ≥30 г (для холодного обеда)
@@ -64,20 +66,21 @@ const lunchOk = (items, P) => { const g = lunchGroups(items); return g.carb >= P
 const carbShare = items => { let c = 0, t = 0; items.forEach(i => { t += i.g; if (['sweet', 'bread', 'grain', 'nuts'].includes(i.cat)) c += i.g; }); return t ? c / t : 0; };
 const round5 = g => Math.max(1, g < 20 ? Math.round(g) : Math.round(g / 5) * 5);
 
-function minFor(m, P, covK) {
-  const k = Math.max(.8, Math.min(1, covK));
-  return { b: P.min_b * k, l: P.min_l * k, d: P.min_d * k, s: 0 }[m];
+// Минимум приёма (ккал на человека) = min_share_pct % от калорий этого приёма по распределению (доля × цель дня). Абсолютные min_b/min_l/min_d — необязательный пол (по умолчанию 0). Перекусы без минимума.
+function minFor(m, P, budget) {
+  if (m === 's') return 0;
+  return Math.max({ b: P.min_b, l: P.min_l, d: P.min_d }[m] || 0, budget * P.min_share_pct / 100);
 }
 
 function usable(dish, m, ctx, perPerson, P, covK) {
   if (!dish.on || dish.meal !== m || !condOk(dish, ctx.flags)) return null;
-  const sc = scale(dish, ctx, perPerson, ctx.i, minFor(m, P, covK) * 1.02, m === 'l' && !isHotLunch(dish) ? P : null);
+  const sc = scale(dish, ctx, perPerson, ctx.i, minFor(m, P, perPerson), m === 'l' && !isHotLunch(dish) ? P : null);
   if (!sc) return null;
   if (m === 'l' && sc.grams < P.min_l_g) return null;
   return sc;
 }
 
-const mainGrain = (dish, ctx) => { const ing = dish.ing[0]; if (!ing) return null; const p = pick(ing, ctx, ctx.i); return p && p.cat === 'grain' ? p.id : null; };
+const mainGrain = (dish, ctx) => { const ing = dish.ing.find(i => !isWater(i.name)); if (!ing) return null; const p = pick(ing, ctx, ctx.i); return p && p.cat === 'grain' ? p.id : null; };
 
 // Приём из нескольких блюд. Если ни одно блюдо в одиночку (даже с порцией до «макс» каждого продукта) не даёт нужных калорий,
 // берём самое «сытное» блюдо этого типа и добавляем другие, пока бюджет не набран (до 3 блюд). Порции подгоняются в тех же пределах мин/макс.
@@ -98,7 +101,7 @@ function composedEntry(cm, n, ctx) {
 }
 
 function toEntry(dish, sc, n, ctx) {
-  const items = sc.items.map(it => ({ pid: it.pid, g: it.skip ? Math.round(it.g * n * 100) / 100 : round5(it.g * n), unit: it.unit, skip: it.skip }));
+  const items = sc.items.map(it => it.water ? { pid: null, name: it.name, g: Math.max(10, Math.round(it.g * n / 10) * 10), unit: it.unit, water: true, skip: null } : { pid: it.pid, g: it.skip ? Math.round(it.g * n * 100) / 100 : round5(it.g * n), unit: it.unit, skip: it.skip });
   return { dish: dish.id, name: dish.name, items, cook: dish.cook || 0, perKcal: Math.round(sc.kcal), perGrams: Math.round(sc.grams), pin: false };
 }
 
@@ -152,7 +155,7 @@ export function buildMenu(trip, calc, mset, pset, P, old = null, seed = 0) {
     days.push(day);
   });
   // проверки минимумов по каждому дню
-  days.forEach((d, i) => slots.forEach(slot => { const e = d[slot.id]; if (!e || e.empty) return; const per = itemsKcal(e.items, prods) / n, mn = minFor(slot.type, P, covK); if (per < mn * 0.97) warnings.push(`День ${i + 1}, ${slotLabel(slots, slot.id).toLowerCase()}: ${Math.round(per)} ккал на человека, меньше минимума ${Math.round(mn)}`); }));
+  days.forEach((d, i) => slots.forEach(slot => { const e = d[slot.id]; if (!e || e.empty) return; const bud = Math.min(calc.days[i].target / n, P.kcal_cap) * (+slot.share || 0) / 100 * (slot.type === 's' ? 1 : mainK), per = itemsKcal(e.items, prods) / n, mn = minFor(slot.type, P, bud); if (per < mn * 0.97) warnings.push(`День ${i + 1}, ${slotLabel(slots, slot.id).toLowerCase()}: ${Math.round(per)} ккал на человека, меньше минимума ${Math.round(mn)}`); }));
   // при заданных минимумах приёмов день может выйти за цель — говорим об этом, а не молча урезаем
   calc.days.forEach((cd, i) => { const per = slots.reduce((s, sl) => s + itemsKcal(days[i][sl.id]?.items || [], prods), 0) / n, tg = cd.target / n; if (tg > 0 && per > tg * 1.05) warnings.push(`День ${i + 1}: меню даёт ${Math.round(per)} ккал на человека при цели ${Math.round(tg)} (больше на ${Math.round((per / tg - 1) * 100)}%): сработали минимумы приёмов`); else if (tg > 0 && per < tg * 0.9) warnings.push(`День ${i + 1}: меню даёт только ${Math.round(per)} ккал на человека при цели ${Math.round(tg)} (недобор ${Math.round((1 - per / tg) * 100)}%)`); });
   // блюдо, у которого нет хотя бы одного продукта, не готовится целиком — объясняем, какие продукты не найдены, иначе меню молча получается почти пустым

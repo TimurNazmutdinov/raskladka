@@ -50,7 +50,8 @@ export function exportData() { const e = ensure(); return e.menu && e.calc.summa
 if (typeof window !== 'undefined') window.RK = { buildWorkbook, exportData };
 
 export const menuKcal = (day, prods) => Object.values(day).reduce((s, e) => s + itemsKcal(e?.items || [], prods), 0);
-export const menuGrams = day => Object.values(day).reduce((s, e) => s + (e?.items || []).reduce((a, i) => a + (i.skip ? 0 : i.g), 0), 0);
+export const menuGrams = day => Object.values(day).reduce((s, e) => s + (e?.items || []).reduce((a, i) => a + (i.skip || i.water ? 0 : i.g), 0), 0); // сухой вес: воду на готовку не носят
+export const menuWater = day => Object.values(day).reduce((s, e) => s + (e?.items || []).reduce((a, i) => a + (i.water ? i.g : 0), 0), 0); // вода на готовку, г на группу
 const itemName = (it, prods) => it.name || prods.find(p => p.id === it.pid)?.name || '?';
 
 function why(cd, P) {

@@ -1,5 +1,5 @@
 // Меню-план: какие блюда стоят в ячейках «день × приём пищи». План «оригинал» применяется без генерации и масштабирования.
-import { MEALS } from './menu.js';
+import { MEALS, isWater } from './menu.js';
 import { mealsOf, firstSlotOfType } from './meals.js';
 
 const DASH = ' + ';
@@ -18,6 +18,7 @@ export function planMenu(trip, calc, plan, dset, pset) {
     else {
       const items = d.ing.map(ing => {
         const p = prodBy.get(ing.name), g = ing.g * portions;
+        if (!p && isWater(ing.name)) return { pid: null, name: ing.name, g, unit: ing.unit || 'г', perPortion: ing.g, skip: null, water: true }; // вода на готовку
         let skip = null;
         if (!p) skip = 'нет в наборе продуктов';
         else if (ing.perGroup) skip = 'количество указано «на группу»';

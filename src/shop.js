@@ -7,7 +7,7 @@ import { addBuyer, removeBuyer, assign, buyerOf, splitByBuyer, buyerText, buyerC
 import { groupNotes } from './summary.js';
 import { products, byId } from './pstore.js';
 import { getTrip, saveTrip, setTrip, newTrip } from './trip.js';
-import { ensure, menuGrams, exportData } from './calcview.js';
+import { ensure, menuGrams, menuWater, exportData } from './calcview.js';
 import { exportExcel } from './exportxlsx.js';
 import { esc } from './ui.js';
 
@@ -29,7 +29,7 @@ export function shopData() {
   const trip = getTrip(), { calc, menu, P, pset } = ensure();
   if (!menu) return null;
   const n = calc.summary.n, need = {}, add = (pid, g, tag) => { need[pid] ??= { g: 0, reserve: 0 }; need[pid][tag || 'g'] += g; };
-  menu.days.forEach(d => Object.values(d).forEach(e => (e?.items || []).forEach(it => add(it.pid, it.g))));
+  menu.days.forEach(d => Object.values(d).forEach(e => (e?.items || []).forEach(it => { if (!it.water) add(it.pid, it.g); })));
   const extra = (name, g) => { const p = products().find(x => x.on && x.name === name); if (p && g > 0) add(p.id, g); };
   extra('Соль', P.salt_fix + P.salt_pp * n * menu.days.length);
   const reserve = reserveItems(trip, calc, P);
@@ -67,7 +67,7 @@ function textExport(D) {
   const { trip, rows, calc } = D, t = [`Раскладка: ${trip.name || 'поход'}`, `${calc.summary.days} дн., ${calc.summary.n} чел.`, '', 'СПИСОК ПОКУПОК'];
   DEPT_ORDER.forEach(dep => { const r = rows.filter(x => x.dept === dep); if (r.length) { t.push(dep + ':'); r.forEach(x => t.push(`  ${x.p.name} — ${x.packs && opts.round ? `${x.packs} уп. (${n0(x.buy)} г)` : n0(x.total) + ' г'}`)); } });
   t.push('', 'ПО ДНЯМ');
-  D.menu.days.forEach((d, i) => { t.push(`День ${i + 1}`); const sl = mealsOf(trip, D.P); sl.forEach(s => { const e = d[s.id]; if (e?.items?.length) t.push(`  ${slotLabel(sl, s.id)}: ${e.name || ''} — ${e.items.map(it => `${byId(it.pid)?.name} ${it.g} г`).join(', ')}`); }); });
+  D.menu.days.forEach((d, i) => { t.push(`День ${i + 1}`); const sl = mealsOf(trip, D.P); sl.forEach(s => { const e = d[s.id]; if (e?.items?.length) t.push(`  ${slotLabel(sl, s.id)}: ${e.name || ''} — ${e.items.filter(it => !it.water).map(it => `${byId(it.pid)?.name} ${it.g} г`).join(', ')}${e.items.some(it => it.water) ? `; вода на готовку ≈ ${(e.items.filter(it => it.water).reduce((s, i) => s + i.g, 0) / 1000).toFixed(1)} л` : ''}`); }); });
   return t.join('\n');
 }
 const csvExport = D => '﻿Товар;Нужно, г;Резерв, г;Упаковка, г;Упаковок;Купить, г;Отдел\n' + D.rows.map(r => [r.p.name, r.g, r.reserve, r.p.pack || '', r.packs ?? '', r.buy, r.dept].join(';')).join('\n');
@@ -102,8 +102,8 @@ export const views = {
       ctx.buyerData = { all, info };
     } else if (tab === 'pack') {
       body = menu.days.map((d, i) => `<h3>День ${i + 1}</h3>` + mealsOf(trip, P).map(sl => { const m = sl.type, e = d[sl.id]; if (!e?.items?.length) return ''; const sp = m === 'l' ? Math.max(1, +trip.prefs.lunchSplit || 1) : 1, times = ['11:00', '13:30', '16:00'];
-        const part = k => e.items.map(it => `${esc(byId(it.pid)?.name)} ${Math.round(it.g / sp / 5) * 5 || 5} г`).join(', ');
-        return `<div class="pk"><b>${esc(slotLabel(mealsOf(trip, P), sl.id))}</b> · ${esc(e.name || '')}${sp > 1 ? ` <span class="muted">· ${sp} пакета(ов) на человека-приём</span>` : ''}<br>${sp > 1 ? Array.from({ length: sp }, (_, k) => `<span class="muted"><b>Пакет ${k + 1} (${times[sp === 2 ? [0, 1][k] === 0 ? 0 : 2 : k]})</b>: ${part(k)}</span>`).join('<br>') : `<span class="muted">${e.items.map(it => `${esc(byId(it.pid)?.name)} ${it.g} г`).join(', ')}</span>`}</div>`; }).join('')).join('') + '<button class="btn" id="print">Печать этикеток</button>';
+        const wl = e.items.filter(it => it.water).reduce((s, i) => s + i.g, 0), part = k => e.items.filter(it => !it.water).map(it => `${esc(byId(it.pid)?.name)} ${Math.round(it.g / sp / 5) * 5 || 5} г`).join(', ');
+        return `<div class="pk"><b>${esc(slotLabel(mealsOf(trip, P), sl.id))}</b> · ${esc(e.name || '')}${wl ? ` <span class="muted">· вода на готовку ≈ ${(wl / 1000).toFixed(1).replace('.', ',')} л (набирается на месте)</span>` : ''}${sp > 1 ? ` <span class="muted">· ${sp} пакета(ов) на человека-приём</span>` : ''}<br>${sp > 1 ? Array.from({ length: sp }, (_, k) => `<span class="muted"><b>Пакет ${k + 1} (${times[sp === 2 ? [0, 1][k] === 0 ? 0 : 2 : k]})</b>: ${part(k)}</span>`).join('<br>') : `<span class="muted">${e.items.filter(it => !it.water).map(it => `${esc(byId(it.pid)?.name)} ${it.g} г`).join(', ')}</span>`}</div>`; }).join('')).join('') + '<button class="btn" id="print">Печать этикеток</button>';
     } else if (tab === 'bags') {
       const W = weights(D), lim = p => (p.sex === 'F' ? trip.gear.maxF : trip.gear.maxM);
       body = `<p class="muted small">Вес рюкзака в начале каждого дня (личное снаряжение + доля общего + продукты и газ до ближайшей заброски). Продукты делятся по «Доле общего груза».</p>` + W.map(w => `<h3>${esc(w.p.name || 'Участник')} <span class="muted">· доля ${(w.sh * 100).toFixed(0)}%${lim(w.p) ? ` · лимит ${lim(w.p)} кг` : ''}</span></h3>
@@ -112,7 +112,7 @@ export const views = {
     } else if (tab === 'fuel') {
       const fd = fuelDays(calc, P), tot = fd.reduce((a, b) => a + b, 0), water = calc.days.map(d => d.water);
       body = `<div class="metrics"><div><span class="big">${n0(tot)} г</span><span class="muted small">газ на поход</span></div><div><span class="big">${Math.ceil(tot / P.canister_g)}</span><span class="muted small">баллонов по ${P.canister_g} г</span></div><div><span class="big">${(water.reduce((a, b) => a + b, 0) / water.length).toFixed(1).replace('.', ',')} л</span><span class="muted small">воды на группу в день</span></div></div>
-        <div class="tbl"><table><tr><th>День</th><th>Газ, г</th><th>Вода, л</th></tr>${fd.map((f, i) => `<tr><td>${i + 1}</td><td>${n0(f)}</td><td>${water[i].toFixed(1)}</td></tr>`).join('')}</table></div>
+        <div class="tbl"><table><tr><th>День</th><th>Газ, г</th><th>Вода (питьё), л</th><th>Вода на готовку, л</th></tr>${fd.map((f, i) => `<tr><td>${i + 1}</td><td>${n0(f)}</td><td>${water[i].toFixed(1)}</td><td>${(menuWater(menu.days[i]) / 1000).toFixed(1)}</td></tr>`).join('')}</table></div>
         <p class="muted small">Газ — по нормам из Настроек (без снега, с топкой снега, мороз/высота). Вода: ${P.water_ml} мл на кг веса, в жару плюс ${P.hot_l} л.</p>`;
     } else {
       body = `<div class="two"><button class="btn" id="xl">Выгрузить в Excel</button><button class="btn" id="share">Поделиться текстом</button><button class="btn ghost" id="print">Печать / PDF</button></div>
