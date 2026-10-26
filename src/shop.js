@@ -13,7 +13,7 @@ const DEPT_ORDER = ['Овощи', 'Хлеб', 'Мясо', 'Молочный от
 
 // Аварийный запас: калорийные продукты на reserve_days дней
 function reserveItems(trip, calc, P) {
-  const parts = [['Грецкий|Арахис|Миндаль', .3], ['Шоколад', .25], ['Халва|Козинаки', .25], ['Масло топлёное|Сало', .2]], out = [];
+  const parts = [['Грецкий|Арахис|Миндаль', .3], ['Шоколад', .25], ['Халва|Козинаки', .25], ['Масло топлёное', .2]], out = [];
   const kcal = calc.summary.reserveKcal;
   parts.forEach(([kw, f]) => {
     const p = products().find(x => x.on && kw.split('|').some(k => x.name.includes(k)) && allowed(x, trip.group));

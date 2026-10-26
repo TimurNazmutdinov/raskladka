@@ -1,9 +1,9 @@
 // Наборы продуктов. Продукты похода — это включённые продукты выбранного набора (trip.productSet).
 import * as store from './store.js';
 import { makeRepo } from './setrepo.js';
-import { builtinProductSets } from './builtin.js';
+import { builtinProductSets, REMOVED } from './builtin.js';
 
-export const repo = makeRepo('products', builtinProductSets);
+export const repo = makeRepo('products', builtinProductSets, s => { if (!s.builtin) return false; const n = s.items.length; s.items = s.items.filter(p => !REMOVED.products.includes(p.name)); return s.items.length !== n; });
 let activeId = null;
 
 // Однократная очистка при переходе на v2: удаляем старые продукты, блюда и меню, остальное не трогаем

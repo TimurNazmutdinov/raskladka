@@ -98,13 +98,14 @@ export function computeTrip(trip, P) {
   if (!n) return { days: [], summary: null, warnings: ['Добавьте участников с возрастом, ростом и весом.'] };
   if (!days.length) return { days: [], summary: null, warnings: ['Добавьте дни похода.'] };
   const cov = coverage(trip.prefs.mode, trip.prefs.custom, P) / 100;
+  const goal = trip.prefs.kcalGoal > 0 ? trip.prefs.kcalGoal : null, restK = (trip.prefs.restPct ?? 80) / 100; // цель по калориям задана вручную (ккал/чел/день)
   const apf = appetiteFactors(days, P), shareSum = g.reduce((s, p) => s + (p.share || 1), 0);
   const out = days.map((d, i) => {
     const left = days.length - i + P.reserve_days;
     const foodKg = n * (P.ref_std * cov / 0.67) * left / 1000; // грубая оценка веса еды в рюкзаках до расчёта меню
     const per = g.map(p => {
       const share = (p.share || 1) / shareSum, L = (p.gear || 0) + (trip.gear.common || 0) * share + foodKg * share;
-      const nd = personNeed(p, d, L, P), target = nd.total * cov * apf[i];
+      const nd = personNeed(p, d, L, P), target = goal ? goal * (p.appetite || 1) * (isRest(d) ? restK : 1) : nd.total * cov * apf[i];
       return { p, L, ...nd, target, grams: target / P.kcal100 * 100 };
     });
     const need = per.reduce((s, x) => s + x.total, 0), target = per.reduce((s, x) => s + x.target, 0);

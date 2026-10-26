@@ -2,7 +2,8 @@
 import * as store from './store.js';
 
 export const MAX_SETS = 10;
-export function makeRepo(storeName, seed) {
+// migrate(набор) — необязательная правка уже сохранённых наборов при загрузке; возвращает true, если набор изменён.
+export function makeRepo(storeName, seed, migrate = null) {
   let list = [];
   const sorted = () => list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const persist = s => store.put(storeName, s.id, s);
@@ -10,6 +11,7 @@ export function makeRepo(storeName, seed) {
     async load() {
       list = (await store.getAll(storeName)).filter(s => s && s.id && Array.isArray(s.items || s.dishes || s.rows));
       if (!list.length && seed) { list = seed().map((s, i) => ({ ...s, order: i })); for (const s of list) await persist(s); }
+      if (migrate) for (const s of list) if (migrate(s)) await persist(s);
       sorted(); return list;
     },
     list: () => sorted(),

@@ -246,7 +246,8 @@ __m['setrepo.js'] = (() => {
 const store = __m['store.js'];
 
 const MAX_SETS = 10;
-function makeRepo(storeName, seed) {
+// migrate(набор) — необязательная правка уже сохранённых наборов при загрузке; возвращает true, если набор изменён.
+function makeRepo(storeName, seed, migrate = null) {
   let list = [];
   const sorted = () => list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const persist = s => store.put(storeName, s.id, s);
@@ -254,6 +255,7 @@ function makeRepo(storeName, seed) {
     async load() {
       list = (await store.getAll(storeName)).filter(s => s && s.id && Array.isArray(s.items || s.dishes || s.rows));
       if (!list.length && seed) { list = seed().map((s, i) => ({ ...s, order: i })); for (const s of list) await persist(s); }
+      if (migrate) for (const s of list) if (migrate(s)) await persist(s);
       sorted(); return list;
     },
     list: () => sorted(),
@@ -278,12 +280,12 @@ const PR = (name, cat, kcal, p, f, c, pack, shelf, unit, tags = '', fresh = fals
 
 const BASE = [
   PR('Гречка', 'grain', 313, 12.6, 3.3, 62.1, 800, 999, 'пачка'), PR('Рис', 'grain', 335, 7, 0.6, 77, 800, 999, 'пачка'),
-  PR('Пшено', 'grain', 348, 11.5, 3.3, 69.3, 800, 999, 'пачка'), PR('Овсяные хлопья', 'grain', 366, 12, 6.2, 62, 500, 999, 'пачка', 'gluten'),
+  PR('Овсяные хлопья', 'grain', 366, 12, 6.2, 62, 500, 999, 'пачка', 'gluten'),
   PR('Макароны', 'grain', 350, 11, 1.3, 72, 400, 999, 'пачка', 'gluten'), PR('Вермишель', 'grain', 350, 11, 1.3, 72, 400, 999, 'пачка', 'gluten'),
   PR('Хлеб', 'bread', 242, 8, 1, 48, 400, 2, 'батон', 'gluten', true), PR('Сухари', 'bread', 350, 11, 3, 70, 300, 365, 'пачка', 'gluten'),
   PR('Галеты', 'bread', 380, 10, 7, 70, 200, 365, 'пачка', 'gluten'),
   PR('Тушёнка говяжья', 'meat', 232, 16, 18, 0, 338, 730, 'банка', 'meat'), PR('Тушёнка свиная', 'meat', 349, 14, 32, 0, 338, 730, 'банка', 'meat pork'),
-  PR('Сало солёное', 'meat', 770, 2.4, 89, 0, 300, 30, 'кусок', 'meat pork'), PR('Колбаса сырокопчёная', 'meat', 440, 25, 38, 1, 300, 60, 'палка', 'meat pork'),
+  PR('Колбаса сырокопчёная', 'meat', 440, 25, 38, 1, 300, 60, 'палка', 'meat pork'),
   PR('Сыр твёрдый', 'cheese', 350, 25, 27, 0, 200, 30, 'кусок', 'lactose'),
   PR('Молоко сухое', 'dairy', 480, 25, 25, 39, 400, 365, 'пачка', 'lactose'), PR('Сгущённое молоко', 'dairy', 320, 7.2, 8.5, 56, 380, 365, 'банка', 'lactose'),
   PR('Масло сливочное', 'fat', 748, 0.5, 82.5, 0.8, 180, 10, 'пачка', 'lactose'), PR('Масло топлёное', 'fat', 890, 0.3, 99, 0.6, 180, 365, 'банка', 'lactose heat'),
@@ -318,7 +320,9 @@ const EXT = [
   PR('Масло оливковое', 'fat', 899, 0, 99.9, 0, 250, 365, 'бутылка'), PR('Соевый соус в стиках', 'spice', 60, 10, 0, 6, 100, 365, 'упаковка'),
 ];
 const mk = (id, name, list) => ({ id, name, builtin: true, items: list.map((p, i) => ({ ...p, id: id + i, price: null, src: 'справочник', check: p.name === 'Жент', on: true, custom: false })) });
-const builtinProductSets = () => [mk('sb', 'Базовый', BASE), mk('se', 'Расширенный', [...BASE, ...EXT])];
+// Исключено по решению пользователя (2026-10-26): продукты и блюда, которые без них не готовятся. Нужно для миграции уже сохранённых встроенных наборов.
+const REMOVED = { products: ['Пшено', 'Сало солёное'], dishes: ['Пшённая каша со сгущёнкой', 'Обед-перекус 2: сухари, сало, халва', 'Кулеш'] };
+const builtinProductSets =() => [mk('sb', 'Базовый', BASE), mk('se', 'Расширенный', [...BASE, ...EXT])];
 
 // ---- меню ----
 // Условия: any, rest (днёвка), hot (жара), cold (холод), alt3000, first2 (первые 2 дня)
@@ -333,17 +337,14 @@ const BUT = 'Масло сливочное' + T + 'Масло топлёное';
 const BASE_DISHES = [
   dish('b1', 'b', 'Овсяная каша на молоке', 7, ['any'], [['Овсяные хлопья', 70], ['Молоко сухое', 20], ['Сахар', 25], ['Изюм', 15], [BUT, 10], ['Сухари', 30], ['Сыр твёрдый', 30], ['Чай', 2]]),
   dish('b2', 'b', 'Рисовая молочная каша', 25, ['any'], [['Рис', 70], ['Молоко сухое', 25], ['Сахар', 15], [BUT, 10], ['Сухари', 30], ['Сыр твёрдый', 30], ['Какао', 10]]),
-  dish('b3', 'b', 'Пшённая каша со сгущёнкой', 25, ['any'], [['Пшено', 70], ['Сгущённое молоко', 35], [BUT, 10], ['Печенье', 30], ...TEA]),
   dish('b4', 'b', 'Гречка с тушёнкой', 20, ['any'], [['Гречка', 75], ['Тушёнка говяжья' + T + 'Тушёнка свиная', 60], ['Сухари', 30], ['Кофе растворимый', 2], ['Сахар', 10], ['Пряники', 30]]),
   dish('l1', 'l', 'Обед-перекус 1: галеты, сыр, колбаса', 0, ['any'], [['Галеты', 60], ['Сыр твёрдый', 40], ['Колбаса сырокопчёная', 40], ['Шоколад', 30], ['Арахис', 30], ['Изюм', 20], ['Чай', 2], ['Сахар', 15]]),
-  dish('l2', 'l', 'Обед-перекус 2: сухари, сало, халва', 0, ['any'], [['Сухари', 60], ['Сало солёное', 40], ['Халва подсолнечная', 40], ['Печенье', 30], ['Курага', 25], ['Чай', 2], ['Сахар', 15]]),
   dish('l3', 'l', 'Обед-перекус 3: хлеб, колбаса, сыр', 0, ['first2'], [['Хлеб', 90], ['Колбаса сырокопчёная', 50], ['Сыр твёрдый', 40], ['Вафли', 40], ['Арахис', 30], ['Чай', 2], ['Сахар', 15]]),
   dish('l4', 'l', 'Обед-перекус 4: галеты, сыр, пряники', 0, ['any'], [['Галеты', 60], ['Сыр твёрдый', 50], ['Пряники', 50], ['Шоколад', 25], ['Изюм', 25], ['Чай', 2], ['Сахар', 15]]),
   dish('lh', 'l', 'Горячий обед: суп с вермишелью', 10, ['rest', 'cold'], [['Суп в пакете', 25], ['Вермишель', 30], ['Сухари', 40], ['Сыр твёрдый', 30], ['Печенье', 30], ['Чай', 2], ['Сахар', 10]]),
   dish('d1', 'd', 'Макароны по-флотски', 12, ['any'], [['Макароны', 100], ['Тушёнка говяжья' + T + 'Тушёнка свиная', 70], ['Томатная паста', 15], ...SUPPER_ADD]),
   dish('d2', 'd', 'Гречка с тушёнкой (ужин)', 20, ['any'], [['Гречка', 90], ['Тушёнка говяжья' + T + 'Тушёнка свиная', 70], [BUT, 10], ...SUPPER_ADD]),
   dish('d3', 'd', 'Рис с тушёнкой в томате', 20, ['any'], [['Рис', 90], ['Тушёнка говяжья' + T + 'Тушёнка свиная', 70], ['Томатная паста', 15], ...SUPPER_ADD]),
-  dish('d4', 'd', 'Кулеш', 25, ['any'], [['Пшено', 70], ['Сало солёное', 30], ['Тушёнка говяжья' + T + 'Тушёнка свиная', 50], ...SUPPER_ADD_NOSOUP]),
 ];
 const EXT_DISHES = [
   dish('b5', 'b', 'Овсянка с финиками и орехами', 7, ['any'], [['Овсяные хлопья', 70], ['Молоко сухое', 20], ['Финики', 25], ['Грецкий орех', 15], ['Мёд', 15], ['Сухари', 30], ['Чай', 2]]),
@@ -368,15 +369,15 @@ const builtinMenuSets = () => [
   { id: 'me', name: 'Расширенное', builtin: true, productSetId: 'se', dishes: [...BASE_DISHES, ...EXT_DISHES].map(d => JSON.parse(JSON.stringify(d))) },
 ];
 
-return {builtinProductSets, builtinMenuSets};
+return {REMOVED, builtinProductSets, builtinMenuSets};
 })();
 __m['pstore.js'] = (() => {
 // Наборы продуктов. Продукты похода — это включённые продукты выбранного набора (trip.productSet).
 const store = __m['store.js'];
 const {makeRepo} = __m['setrepo.js'];
-const {builtinProductSets} = __m['builtin.js'];
+const {builtinProductSets, REMOVED} = __m['builtin.js'];
 
-const repo = makeRepo('products', builtinProductSets);
+const repo = makeRepo('products', builtinProductSets, s => { if (!s.builtin) return false; const n = s.items.length; s.items = s.items.filter(p => !REMOVED.products.includes(p.name)); return s.items.length !== n; });
 let activeId = null;
 
 // Однократная очистка при переходе на v2: удаляем старые продукты, блюда и меню, остальное не трогаем
@@ -407,9 +408,9 @@ return {repo, loadProducts, setActive, activeSet, products, byId, byName, enable
 __m['mstore.js'] = (() => {
 // Наборы меню (блюда с продуктами на человека). Набор привязан к набору продуктов (productSetId).
 const {makeRepo} = __m['setrepo.js'];
-const {builtinMenuSets} = __m['builtin.js'];
+const {builtinMenuSets, REMOVED} = __m['builtin.js'];
 
-const repo = makeRepo('menus', builtinMenuSets);
+const repo = makeRepo('menus', builtinMenuSets, s => { if (!s.builtin) return false; const n = s.dishes.length; s.dishes = s.dishes.filter(d => !REMOVED.dishes.includes(d.name)); return s.dishes.length !== n; });
 const MEAL_NAMES = { b: 'Завтрак', l: 'Обед', d: 'Ужин', s: 'Перекус' };
 const COND = [['any', 'любой день'], ['rest', 'днёвка'], ['hot', 'жара'], ['cold', 'холод'], ['alt3000', 'высота > 3000'], ['first2', 'первые 2 дня']];
 const loadMenus = () => repo.load();
@@ -518,13 +519,14 @@ function computeTrip(trip, P) {
   if (!n) return { days: [], summary: null, warnings: ['Добавьте участников с возрастом, ростом и весом.'] };
   if (!days.length) return { days: [], summary: null, warnings: ['Добавьте дни похода.'] };
   const cov = coverage(trip.prefs.mode, trip.prefs.custom, P) / 100;
+  const goal = trip.prefs.kcalGoal > 0 ? trip.prefs.kcalGoal : null, restK = (trip.prefs.restPct ?? 80) / 100; // цель по калориям задана вручную (ккал/чел/день)
   const apf = appetiteFactors(days, P), shareSum = g.reduce((s, p) => s + (p.share || 1), 0);
   const out = days.map((d, i) => {
     const left = days.length - i + P.reserve_days;
     const foodKg = n * (P.ref_std * cov / 0.67) * left / 1000; // грубая оценка веса еды в рюкзаках до расчёта меню
     const per = g.map(p => {
       const share = (p.share || 1) / shareSum, L = (p.gear || 0) + (trip.gear.common || 0) * share + foodKg * share;
-      const nd = personNeed(p, d, L, P), target = nd.total * cov * apf[i];
+      const nd = personNeed(p, d, L, P), target = goal ? goal * (p.appetite || 1) * (isRest(d) ? restK : 1) : nd.total * cov * apf[i];
       return { p, L, ...nd, target, grams: target / P.kcal100 * 100 };
     });
     const need = per.reduce((s, x) => s + x.total, 0), target = per.reduce((s, x) => s + x.target, 0);
@@ -890,6 +892,43 @@ function daysSection(trip, save, ctx) {
 
 return {ensurePlan, fmtDate, rebuild, missing, daysSection};
 })();
+__m['simple.js'] = (() => {
+// Режим «Просто, на группу»: вместо списка участников — число человек и «средний участник».
+// Приложение создаёт n одинаковых виртуальных участников, поэтому меню, закупки и рюкзаки работают как раньше.
+const defaultSimple = () => ({ on: false, n: 12, weight: 70, height: 172, age: 35, veg: false, noEat: '', notes: '' });
+
+// d: { appetite, shareM, shareF } — значения по умолчанию из параметров. Пол чередуется (М, Ж, М, …) — средний состав.
+function virtualGroup(s, d) {
+  const n = Math.max(1, Math.min(60, Math.round(+s.n) || 1)), no = (s.noEat || '').trim();
+  return Array.from({ length: n }, (_, i) => {
+    const f = i % 2 === 1;
+    return { id: 'sim' + i, virtual: true, name: `Участник ${i + 1}`, sex: f ? 'F' : 'M', age: +s.age || 35, height: +s.height || 172, weight: +s.weight || 70, gear: null, appetite: d.appetite, share: f ? d.shareF : d.shareM, allergy: no, veg: !!s.veg, dislike: no };
+  });
+}
+
+// Дополняет сохранённый поход полями, которых в старых данных нет
+function ensureTrip(t) {
+  t.simple = { ...defaultSimple(), ...(t.simple || {}) };
+  t.prefs ||= {}; if (!('kcalGoal' in t.prefs)) t.prefs.kcalGoal = null; if (t.prefs.restPct == null) t.prefs.restPct = 80;
+  return t;
+}
+
+// Включает/выключает простой режим. При включении подробная группа запоминается и возвращается при выключении.
+function setSimpleMode(t, on, d) {
+  ensureTrip(t);
+  if (on) {
+    if (t.group.length && !t.group.every(p => p.virtual)) t.detailedGroup = t.group;
+    t.simple.on = true; t.group = virtualGroup(t.simple, d);
+  } else {
+    t.simple.on = false;
+    if (t.detailedGroup) { t.group = t.detailedGroup; delete t.detailedGroup; }
+  }
+  return t;
+}
+const rebuildSimple = (t, d) => { if (t.simple.on) t.group = virtualGroup(t.simple, d); return t; };
+
+return {defaultSimple, virtualGroup, ensureTrip, setSimpleMode, rebuildSimple};
+})();
 __m['trip.js'] = (() => {
 // Экран «Поход»: общий блок, группа, вкладка «Вручную». Данные хранятся в одном объекте trip.
 const {COVERS, DAY_TYPES, CATEGORIES} = __m['defaults.js'];
@@ -899,21 +938,24 @@ const {repo: prepo} = __m['pstore.js'];
 const {repo: mrepo} = __m['mstore.js'];
 const {daysSection, ensurePlan, rebuild} = __m['tripdays.js'];
 const store = __m['store.js'];
+const {defaultSimple, ensureTrip, setSimpleMode, rebuildSimple} = __m['simple.js'];
 
 const newTrip = () => ({
   name: '', start: '', end: '', kind: 'mountain', category: CATEGORIES[0],
   days: [], group: [], drops: [],
   gear: { common: null, maxM: null, maxF: null },
   food: { hot: '2', lunchHot: false },
-  prefs: { mode: 'std', custom: null, breakfast: 'milk', sugar: 'common', snacks: 'common', treat: false, budget: null, likes: '', dislikes: '' },
+  prefs: { mode: 'std', custom: null, breakfast: 'milk', sugar: 'common', snacks: 'common', treat: false, budget: null, likes: '', dislikes: '', kcalGoal: null, restPct: 80 },
+  simple: defaultSimple(),
 });
 
 let trip;
-const loadTrip = async () => { trip = (await store.get('trips', 'current')) || newTrip(); return trip; };
+const loadTrip = async () => { trip = ensureTrip((await store.get('trips', 'current')) || newTrip()); return trip; };
+const simpleDefs = () => ({ appetite: getParam('appetite_def'), shareM: getParam('share_m'), shareF: getParam('share_f') });
 const save = () => store.put('trips', 'current', trip);
 const getTrip = () => trip;
 const saveTrip = save;
-const setTrip = t => { trip = t; save(); };
+const setTrip = t => { trip = ensureTrip(t); save(); };
 const back = (to, label) => `<button class="back" data-go="${to}">‹ ${label}</button>`;
 const SEX = [['M', 'М'], ['F', 'Ж']];
 const KG = 'кг';
@@ -931,6 +973,17 @@ const F = {
     { k: 'appetite', label: 'Коэффициент аппетита', type: 'number', help: 'Насколько человек ест больше или меньше обычного. 1.0 — как все, 1.2 — ест на пятую часть больше, 0.9 — меньше. Умножает его потребность в калориях, поэтому влияет на порции в раскладке. Если не знаешь, оставь 1.0; после похода приложение подскажет поправку.' },
     { k: 'share', label: 'Доля общего груза', type: 'number', help: 'Какую часть общего груза (продукты, палатки, котлы, горелки) несёт человек. 1.0 — как остальные, меньше — несёт меньше, например 0.7. По этим долям на этапе «Покупки» считаются рюкзаки. Личное снаряжение сюда не входит, оно вводится отдельно.' },
     { k: 'allergy', label: 'Аллергии' }, { k: 'veg', label: 'Вегетарианец', type: 'check' }, { k: 'dislike', label: 'Не ест' },
+  ],
+  simple: [
+    { k: 'n', label: 'Человек в группе', type: 'number' },
+    { k: 'weight', label: 'Средний вес', type: 'number', unit: KG }, { k: 'height', label: 'Средний рост', type: 'number', unit: 'см' }, { k: 'age', label: 'Средний возраст', type: 'number', unit: 'лет' },
+    { k: 'veg', label: 'Есть вегетарианцы', type: 'check', help: 'Тогда мясные продукты в меню не используются: меню одно на всю группу.' },
+    { k: 'noEat', label: 'Не едят / аллергии', help: 'Через запятую, например: орехи, грибы. Эти продукты в меню не попадут.' },
+    { k: 'notes', label: 'Заметки о предпочтениях', help: 'Свободный текст, например: «1 чел — без глютена, 2 чел — не ест рыбу». Программа его не разбирает: заметки попадут в сводку и в информацию закупщикам.' },
+  ],
+  goal: [
+    { k: 'kcalGoal', label: 'Цель по калориям', type: 'number', unit: 'ккал/чел/день', help: 'Если задана, она заменяет расчёт по нагрузке: каждый день цель одна и та же. Пусто — считать по нагрузке и режиму раскладки.' },
+    { k: 'restPct', label: 'Днёвка', type: 'number', unit: '% от цели', show: p => p.kcalGoal > 0 },
   ],
   gear: [
     { k: 'common', label: 'Общественное снаряжение', type: 'number', unit: KG },
@@ -980,11 +1033,21 @@ const views = {
   },
 
   group(_, ctx) {
+    const on = trip.simple.on;
+    const mode = `<div class="fld"><label>Как считаем</label><div class="ctl"><div class="seg"><button data-gmode="0" class="${on ? '' : 'on'}">Подробно, по участникам</button><button data-gmode="1" class="${on ? 'on' : ''}">Просто, на группу</button></div></div></div>`;
+    const goal = `<h3>Цель по калориям</h3><div id="goalf">${form(F.goal, trip.prefs)}</div>`;
     return {
-      html: `${back('', 'Поход')}<h2>Группа</h2>
-        ${trip.group.length ? `<ul class="list">${trip.group.map((p, i) => `<li><button data-go="person" data-arg="${i}"><span>${esc(p.name) || 'Без имени'} · ${p.sex === 'F' ? 'Ж' : 'М'}${p.age ? ' · ' + p.age : ''}</span><span class="muted">${p.weight ? p.weight + ' кг' : ''} ›</span></button></li>`).join('')}</ul>` : '<p class="empty">Участников пока нет.</p>'}
-        <button class="btn" id="add">Добавить участника</button>`,
-      bind(root) { root.querySelector('#add').onclick = () => { trip.group.push(newPerson()); save(); ctx.go('person', trip.group.length - 1); }; },
+      html: `${back('', 'Поход')}<h2>Группа</h2>${mode}
+        ${on ? `<p class="muted">Расчёт усреднённый: все участники одинаковые, пол чередуется. Чтобы учесть каждого, переключите на «Подробно».</p><div id="simplef">${form(F.simple, trip.simple)}</div>`
+          : `${trip.group.length ? `<ul class="list">${trip.group.map((p, i) => `<li><button data-go="person" data-arg="${i}"><span>${esc(p.name) || 'Без имени'} · ${p.sex === 'F' ? 'Ж' : 'М'}${p.age ? ' · ' + p.age : ''}</span><span class="muted">${p.weight ? p.weight + ' кг' : ''} ›</span></button></li>`).join('')}</ul>` : '<p class="empty">Участников пока нет.</p>'}
+        <button class="btn" id="add">Добавить участника</button>`}
+        ${goal}`,
+      bind(root) {
+        root.querySelectorAll('[data-gmode]').forEach(b => b.onclick = () => { setSimpleMode(trip, b.dataset.gmode === '1', simpleDefs()); save(); ctx.rerender(); });
+        if (on) bindForm(root.querySelector('#simplef'), F.simple, trip.simple, () => { rebuildSimple(trip, simpleDefs()); save(); }, () => ctx.rerender());
+        else root.querySelector('#add').onclick = () => { trip.group.push(newPerson()); save(); ctx.go('person', trip.group.length - 1); };
+        bindForm(root.querySelector('#goalf'), F.goal, trip.prefs, k => { save(); if (k === 'kcalGoal') ctx.rerender(); }, () => ctx.rerender());
+      },
     };
   },
 
@@ -2487,7 +2550,7 @@ const DEPT_ORDER = ['Овощи', 'Хлеб', 'Мясо', 'Молочный от
 
 // Аварийный запас: калорийные продукты на reserve_days дней
 function reserveItems(trip, calc, P) {
-  const parts = [['Грецкий|Арахис|Миндаль', .3], ['Шоколад', .25], ['Халва|Козинаки', .25], ['Масло топлёное|Сало', .2]], out = [];
+  const parts = [['Грецкий|Арахис|Миндаль', .3], ['Шоколад', .25], ['Халва|Козинаки', .25], ['Масло топлёное', .2]], out = [];
   const kcal = calc.summary.reserveKcal;
   parts.forEach(([kw, f]) => {
     const p = products().find(x => x.on && kw.split('|').some(k => x.name.includes(k)) && allowed(x, trip.group));

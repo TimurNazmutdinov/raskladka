@@ -6,21 +6,24 @@ import { repo as prepo } from './pstore.js';
 import { repo as mrepo } from './mstore.js';
 import { daysSection, ensurePlan, rebuild } from './tripdays.js';
 import * as store from './store.js';
+import { defaultSimple, ensureTrip, setSimpleMode, rebuildSimple } from './simple.js';
 
 export const newTrip = () => ({
   name: '', start: '', end: '', kind: 'mountain', category: CATEGORIES[0],
   days: [], group: [], drops: [],
   gear: { common: null, maxM: null, maxF: null },
   food: { hot: '2', lunchHot: false },
-  prefs: { mode: 'std', custom: null, breakfast: 'milk', sugar: 'common', snacks: 'common', treat: false, budget: null, likes: '', dislikes: '' },
+  prefs: { mode: 'std', custom: null, breakfast: 'milk', sugar: 'common', snacks: 'common', treat: false, budget: null, likes: '', dislikes: '', kcalGoal: null, restPct: 80 },
+  simple: defaultSimple(),
 });
 
 let trip;
-export const loadTrip = async () => { trip = (await store.get('trips', 'current')) || newTrip(); return trip; };
+export const loadTrip = async () => { trip = ensureTrip((await store.get('trips', 'current')) || newTrip()); return trip; };
+const simpleDefs = () => ({ appetite: getParam('appetite_def'), shareM: getParam('share_m'), shareF: getParam('share_f') });
 const save = () => store.put('trips', 'current', trip);
 export const getTrip = () => trip;
 export const saveTrip = save;
-export const setTrip = t => { trip = t; save(); };
+export const setTrip = t => { trip = ensureTrip(t); save(); };
 const back = (to, label) => `<button class="back" data-go="${to}">‹ ${label}</button>`;
 const SEX = [['M', 'М'], ['F', 'Ж']];
 const KG = 'кг';
@@ -38,6 +41,17 @@ const F = {
     { k: 'appetite', label: 'Коэффициент аппетита', type: 'number', help: 'Насколько человек ест больше или меньше обычного. 1.0 — как все, 1.2 — ест на пятую часть больше, 0.9 — меньше. Умножает его потребность в калориях, поэтому влияет на порции в раскладке. Если не знаешь, оставь 1.0; после похода приложение подскажет поправку.' },
     { k: 'share', label: 'Доля общего груза', type: 'number', help: 'Какую часть общего груза (продукты, палатки, котлы, горелки) несёт человек. 1.0 — как остальные, меньше — несёт меньше, например 0.7. По этим долям на этапе «Покупки» считаются рюкзаки. Личное снаряжение сюда не входит, оно вводится отдельно.' },
     { k: 'allergy', label: 'Аллергии' }, { k: 'veg', label: 'Вегетарианец', type: 'check' }, { k: 'dislike', label: 'Не ест' },
+  ],
+  simple: [
+    { k: 'n', label: 'Человек в группе', type: 'number' },
+    { k: 'weight', label: 'Средний вес', type: 'number', unit: KG }, { k: 'height', label: 'Средний рост', type: 'number', unit: 'см' }, { k: 'age', label: 'Средний возраст', type: 'number', unit: 'лет' },
+    { k: 'veg', label: 'Есть вегетарианцы', type: 'check', help: 'Тогда мясные продукты в меню не используются: меню одно на всю группу.' },
+    { k: 'noEat', label: 'Не едят / аллергии', help: 'Через запятую, например: орехи, грибы. Эти продукты в меню не попадут.' },
+    { k: 'notes', label: 'Заметки о предпочтениях', help: 'Свободный текст, например: «1 чел — без глютена, 2 чел — не ест рыбу». Программа его не разбирает: заметки попадут в сводку и в информацию закупщикам.' },
+  ],
+  goal: [
+    { k: 'kcalGoal', label: 'Цель по калориям', type: 'number', unit: 'ккал/чел/день', help: 'Если задана, она заменяет расчёт по нагрузке: каждый день цель одна и та же. Пусто — считать по нагрузке и режиму раскладки.' },
+    { k: 'restPct', label: 'Днёвка', type: 'number', unit: '% от цели', show: p => p.kcalGoal > 0 },
   ],
   gear: [
     { k: 'common', label: 'Общественное снаряжение', type: 'number', unit: KG },
@@ -87,11 +101,21 @@ export const views = {
   },
 
   group(_, ctx) {
+    const on = trip.simple.on;
+    const mode = `<div class="fld"><label>Как считаем</label><div class="ctl"><div class="seg"><button data-gmode="0" class="${on ? '' : 'on'}">Подробно, по участникам</button><button data-gmode="1" class="${on ? 'on' : ''}">Просто, на группу</button></div></div></div>`;
+    const goal = `<h3>Цель по калориям</h3><div id="goalf">${form(F.goal, trip.prefs)}</div>`;
     return {
-      html: `${back('', 'Поход')}<h2>Группа</h2>
-        ${trip.group.length ? `<ul class="list">${trip.group.map((p, i) => `<li><button data-go="person" data-arg="${i}"><span>${esc(p.name) || 'Без имени'} · ${p.sex === 'F' ? 'Ж' : 'М'}${p.age ? ' · ' + p.age : ''}</span><span class="muted">${p.weight ? p.weight + ' кг' : ''} ›</span></button></li>`).join('')}</ul>` : '<p class="empty">Участников пока нет.</p>'}
-        <button class="btn" id="add">Добавить участника</button>`,
-      bind(root) { root.querySelector('#add').onclick = () => { trip.group.push(newPerson()); save(); ctx.go('person', trip.group.length - 1); }; },
+      html: `${back('', 'Поход')}<h2>Группа</h2>${mode}
+        ${on ? `<p class="muted">Расчёт усреднённый: все участники одинаковые, пол чередуется. Чтобы учесть каждого, переключите на «Подробно».</p><div id="simplef">${form(F.simple, trip.simple)}</div>`
+          : `${trip.group.length ? `<ul class="list">${trip.group.map((p, i) => `<li><button data-go="person" data-arg="${i}"><span>${esc(p.name) || 'Без имени'} · ${p.sex === 'F' ? 'Ж' : 'М'}${p.age ? ' · ' + p.age : ''}</span><span class="muted">${p.weight ? p.weight + ' кг' : ''} ›</span></button></li>`).join('')}</ul>` : '<p class="empty">Участников пока нет.</p>'}
+        <button class="btn" id="add">Добавить участника</button>`}
+        ${goal}`,
+      bind(root) {
+        root.querySelectorAll('[data-gmode]').forEach(b => b.onclick = () => { setSimpleMode(trip, b.dataset.gmode === '1', simpleDefs()); save(); ctx.rerender(); });
+        if (on) bindForm(root.querySelector('#simplef'), F.simple, trip.simple, () => { rebuildSimple(trip, simpleDefs()); save(); }, () => ctx.rerender());
+        else root.querySelector('#add').onclick = () => { trip.group.push(newPerson()); save(); ctx.go('person', trip.group.length - 1); };
+        bindForm(root.querySelector('#goalf'), F.goal, trip.prefs, k => { save(); if (k === 'kcalGoal') ctx.rerender(); }, () => ctx.rerender());
+      },
     };
   },
 
