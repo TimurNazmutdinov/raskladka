@@ -1,15 +1,33 @@
 # Раскладка
 
-Офлайн-веб-приложение для планирования продуктов и меню походов. Чистый JavaScript (ES-модули), без фреймворков и без сервера. Открывается двойным щелчком по `Раскладка.html` в Chrome/Edge; данные хранятся в браузере. Экспорт в Excel через `lib/jszip.min.js` и встроенный шаблон `lib/template.js`.
+Офлайн-веб-приложение для планирования продуктов и меню походов. Чистый JavaScript (ES-модули), без фреймворков и без сервера. Открывается двойным щелчком по `Раскладка.html` в Chrome/Edge; данные хранятся в браузере (IndexedDB). Экспорт в Excel через `lib/jszip.min.js` и встроенный шаблон `lib/template.js`. Репозиторий: https://github.com/TimurNazmutdinov/raskladka (ветка `main`, сайт на GitHub Pages).
 
-Структура: `src/` — исходники, `app.bundle.js` — сборка (её и грузит `Раскладка.html`), `lib/` — библиотеки и шаблон, `tests/`, `tools/`, `pwa-off/` — отключённая PWA, `sw.js` — воркер, удаляющий сам себя (для тех, кто ставил v1), `Шаблон раскладки/` — Excel-шаблон и данные. Подробности — в `README.md`, `TZ_raskladka.md`, `QUESTIONS.md`.
+## Структура
+- `src/` — исходники, `app.bundle.js` — сборка (её и грузит `Раскладка.html`; `index.html` только перенаправляет). `lib/` — библиотеки и шаблон, `tests/`, `tools/`.
+- `pwa-off/` — отключённая PWA; корневой `sw.js` — воркер, удаляющий сам себя (для тех, кто ставил v1).
+- `Шаблон раскладки/` — Excel-шаблон, пустая форма загрузки и данные Виктора (в `.gitignore`).
+- Подробности: `README.md`, `TZ_raskladka.md`, `QUESTIONS.md` (там же решения по каждому этапу).
+
+## Карта модулей (src/)
+- Расчёт: `engine.js` (потребность, цель по калориям), `menu.js` (генератор меню, перекусы, `nameMap`), `meals.js` (приёмы пищи как список слотов), `plan.js` (меню-план), `simple.js` (режим «Просто»: виртуальная группа), `units.js` (пересчёт единиц при загрузке), `links.js` (связи названий, aliases).
+- Данные: `builtin.js` (встроенные наборы, `REMOVED` — исключённые продукты), `pstore.js`/`mstore.js`/`plstore.js` + `setrepo.js` (наборы продуктов, меню, планы; миграции сохранённых наборов), `store.js`, `params.js`, `defaults.js` (параметры по умолчанию).
+- Экраны: `app.js` (вкладки), `trip.js`/`tripdays.js` (Поход), `productsview.js`, `menuview.js`, `calcview.js` (Расчёт), `summaryview.js` + `summary.js` (сводка), `shop.js` + `buyers.js` (Покупки, закупщики), `settings.js`, `extras.js`, `loadview.js` + `formio.js` + `xlsx.js` (загрузка и выгрузка Excel/CSV/JSON), `exportxlsx.js` (выгрузка по шаблону).
 
 ## Команды
-- Сборка после правки `src/`: `node tools/build.mjs`
-- Тесты (каждый — `node tests/<имя>.mjs`): test_engine, test_gpx, test_import, test_units, test_links, test_template, test_simple, test_meals, test_summary, test_buyers
-- Отчёт по встроенным блюдам: `node tests/report_dishes.mjs`
-- Обновить встроенный шаблон Excel (из папки «Шаблон раскладки»): `powershell -ExecutionPolicy Bypass -File tools\update-template.ps1`
-- Python-скрипты в `tools/` (`extract_victor.py`, `make_form.py`, `verify_form.py`) нужны только при наличии файлов Виктора; зависимостей не требуют.
+- Сборка после правки `src/`: `node tools/build.mjs` (обязательно, иначе приложение не увидит правки).
+- Тесты (каждый — `node tests/<имя>.mjs`): test_engine, test_gpx, test_import, test_units, test_links, test_template, test_simple, test_meals, test_summary, test_buyers. Ошибка — строка `FAIL`.
+- Отчёт по встроенным блюдам: `node tests/report_dishes.mjs`.
+- Пустой шаблон загрузки: `node tools/make_blank_form.mjs`.
+- Обновить встроенный шаблон Excel: `powershell -ExecutionPolicy Bypass -File tools\update-template.ps1`.
+- Проверка в браузере: `file://` не годится (страница статична), поднимайте локальный сервер (`python -m http.server 8123` из корня проекта, например через `.claude/launch.json`, в git его не добавлять) и открывайте `http://localhost:8123/`.
+- Python-скрипты в `tools/` (`extract_victor.py`, `make_form.py`, `verify_form.py`) нужны только при наличии файлов Виктора. Не запускайте `make_form.py` ради пустой формы: он перезапишет простой шаблон старым.
+
+## Подводные камни
+- Сборщик склеивает модули без проверки имён: забытый `import` проходит тесты и `node --check`, а в приложении падает («openLoad is not defined»). После новых экранов прогоняйте их в браузере и смотрите консоль.
+- Тесты в Node работают с чистой логикой; экраны, IndexedDB и разбор xlsx через `DOMParser` в них не проверяются.
+- Приём пищи в меню хранится по id слота (`b`, `s`, `l`, `s2`, `d`, `x1`…), тип слота (`b|l|d|s`) определяет подходящие блюда.
+- Файлы в репозитории имеют перенос строк LF, Git на Windows предупреждает про CRLF: это нормально.
+- Не коммитить: данные Виктора, `.claude/`, `MIGRATION_REPORT.md`, чужие тестовые xlsx в «Шаблон раскладки».
 
 ## Постоянные правила работы
 - Перед изменением экранов сначала показывай эскиз и жди согласия.
@@ -18,3 +36,4 @@
 - Экономь токены: читай только нужные файлы, не весь код.
 - Решения, принятые без пользователя, записывай в `QUESTIONS.md`.
 - Данные Виктора не изменять и не коммитить (они в `.gitignore`).
+- Коммит — локально; `push` и теги только после явного «ок» пользователя.
