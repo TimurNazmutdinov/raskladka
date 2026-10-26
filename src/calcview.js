@@ -28,7 +28,8 @@ export function sig(trip, pset, mset, P) {
 
 // Возвращает {calc, menu, P, pset, mset}; пересобирает меню, если исходные данные изменились (закреплённое остаётся)
 export function ensure(force = false) {
-  const trip = getTrip(), P = allParams(), calc = computeTrip(trip, P), { pset, mset } = sets(trip);
+  const trip = getTrip(), P = allParams(); if (trip.food?.reserveDays != null) P.reserve_days = trip.food.reserveDays; // аварийный запас задаётся у похода
+  const calc = computeTrip(trip, P), { pset, mset } = sets(trip);
   if (!calc.summary) return { calc, menu: null, P, pset, mset };
   const s = sig(trip, pset, mset, P);
   if (force || !trip.menu || trip.menu.sig !== s || trip.menu.days.length !== trip.days.length) {

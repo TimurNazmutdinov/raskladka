@@ -36,8 +36,9 @@ export function shopData() {
   reserve.forEach(it => add(it.pid, it.g, 'reserve'));
   const rows = Object.entries(need).map(([pid, v]) => {
     const p = byId(pid); if (!p) return null;
-    const total = v.g + v.reserve, packs = p.pack ? Math.ceil(total / p.pack - 1e-9) : null;
-    return { p, g: v.g, reserve: v.reserve, total, packs, buy: opts.round && packs ? packs * p.pack : total, price: p.price && packs ? packs * p.price : (p.price ? p.price * total / (p.pack || 100) : 0), dept: SHOP_DEPT[p.cat] || 'Прочее' };
+    const resPct = Math.max(0, +(trip.reserveItem?.[pid] ?? trip.food?.reservePct ?? 0) || 0), resG = Math.round(v.g * resPct / 100 * 10) / 10; // резерв в % от количества продукта
+    const total = v.g + v.reserve + resG, packs = p.pack ? Math.ceil(total / p.pack - 1e-9) : null;
+    return { p, g: v.g, reserve: v.reserve, resPct, resG, total, packs, buy: opts.round && packs ? packs * p.pack : total, price: p.price && packs ? packs * p.price : (p.price ? p.price * total / (p.pack || 100) : 0), dept: SHOP_DEPT[p.cat] || 'Прочее' };
   }).filter(Boolean);
   return { trip, calc, menu, P, pset, rows, n, reserve };
 }
@@ -82,9 +83,9 @@ export const views = {
     if (tab === 'list') {
       const sum = rows.reduce((s, r) => s + r.price, 0);
       body = `<div class="fld"><label>Крупный шрифт (для магазина)</label><div class="ctl"><input type="checkbox" id="big"${ctx.state.big ? ' checked' : ''}></div></div>
-        ${DEPT_ORDER.map(dep => { const r = rows.filter(x => x.dept === dep).sort((a, b) => a.p.name.localeCompare(b.p.name)); return r.length ? `<h3>${dep}</h3><ul class="list shop">${r.map(x => `<li class="${b[x.p.id] ? 'done' : ''}"><label><input type="checkbox" data-buy="${x.p.id}"${b[x.p.id] ? ' checked' : ''}><span><b>${esc(x.p.name)}</b><br><span class="muted small">нужно ${n0(x.total)} г${x.reserve ? ` (в т.ч. запас ${n0(x.reserve)})` : ''}${x.packs && opts.round ? ` → ${x.packs} × ${x.p.pack} г = ${n0(x.buy)} г` : ''}</span></span></label>${x.price ? `<span>${n0(x.price)} ${opts.currency}</span>` : ''}</li>`).join('')}</ul>` : ''; }).join('')}
+        ${DEPT_ORDER.map(dep => { const r = rows.filter(x => x.dept === dep).sort((a, b) => a.p.name.localeCompare(b.p.name)); return r.length ? `<h3>${dep}</h3><ul class="list shop">${r.map(x => `<li class="${b[x.p.id] ? 'done' : ''}"><label><input type="checkbox" data-buy="${x.p.id}"${b[x.p.id] ? ' checked' : ''}><span><b>${esc(x.p.name)}</b><br><span class="muted small">нужно ${n0(x.total)} г${x.resG ? ` (в т.ч. резерв ${x.resPct}% = ${n0(x.resG)})` : ''}${x.reserve ? ` (в т.ч. аварийный запас ${n0(x.reserve)})` : ''}${x.packs && opts.round ? ` → ${x.packs} × ${x.p.pack} г = ${n0(x.buy)} г` : ''}</span></span></label><span class="muted small">резерв <input data-rp="${x.p.id}" type="number" min="0" step="any" style="width:56px" value="${trip.reserveItem?.[x.p.id] ?? ''}" placeholder="${trip.food?.reservePct ?? 0}"> %</span>${x.price ? `<span>${n0(x.price)} ${opts.currency}</span>` : ''}</li>`).join('')}</ul>` : ''; }).join('')}
         ${sum ? `<p><b>Итого ${n0(sum)} ${opts.currency}</b> · с человека ${n0(sum / n)} ${opts.currency}</p>` : '<p class="muted small">Цены не заданы. Их можно указать в карточке продукта.</p>'}
-        <p class="muted small">Аварийный запас на ${P.reserve_days} дн. включён в список.</p>`;
+        <p class="muted small">Резерв ${trip.food?.reservePct ?? 0}% от количества (для отдельных продуктов можно задать своё) и аварийный запас на ${P.reserve_days} дн. включены в список.</p>`;
     } else if (tab === 'buy') {
       ensureBuyers(trip);
       const opt = sel => '<option value="">не назначено</option>' + trip.buyers.map(x => '<option value="' + x.id + '"' + (x.id === sel ? ' selected' : '') + '>' + esc(x.name) + '</option>').join(''), sp = splitByBuyer(trip, rows);
@@ -124,6 +125,7 @@ export const views = {
         root.querySelectorAll('[data-st]').forEach(x => x.onclick = () => { ctx.state.shopTab = x.dataset.st; ctx.rerender(); });
         root.querySelector('#big')?.addEventListener('change', e => { ctx.state.big = e.target.checked; ctx.rerender(); });
         root.querySelectorAll('[data-buy]').forEach(c => c.onchange = () => { b[c.dataset.buy] = c.checked; saveTrip(); ctx.rerender(); });
+        root.querySelectorAll('[data-rp]').forEach(c => c.onchange = () => { const v = c.value.trim(); trip.reserveItem ||= {}; if (v === '') delete trip.reserveItem[c.dataset.rp]; else trip.reserveItem[c.dataset.rp] = Math.max(0, +v || 0); saveTrip(); ctx.rerender(); });
         if (tab === 'buy') {
           const rer = () => { saveTrip(); ctx.rerender(); }, bd = ctx.buyerData, say = (btn, ok) => { btn.textContent = ok ? 'Скопировано' : 'Не удалось'; };
           root.querySelector('#addbuyer').onclick = () => { addBuyer(trip); rer(); };

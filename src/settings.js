@@ -57,7 +57,7 @@ export const views = {
 
   params(group, ctx) {
     group = group || 'walk';
-    const list = PARAMS.filter(p => p.group === group);
+    const list = PARAMS.filter(p => p.group === group && !p.hidden);
     return {
       html: `${back('settings')}<h2>Параметры расчёта</h2>
         <div class="chips">${GROUPS.map(([g, n]) => `<button data-grp="${g}" class="${g === group ? 'on' : ''}">${n}</button>`).join('')}</div>

@@ -69,7 +69,7 @@ const PARAMS = [
   P('ref_hungry', 'food', 'Ориентир: голодно', 'г/чел·день', 500),
   P('ref_std', 'food', 'Ориентир: стандарт', 'г/чел·день', 600),
   P('ref_full', 'food', 'Ориентир: сытно', 'г/чел·день', 850),
-  P('reserve_days', 'food', 'Аварийный запас', 'дн', 1),
+  { ...P('reserve_days', 'food', 'Аварийный запас', 'дн', 1), hidden: true }, // задаётся в «Питание и заброски» у похода (значение по умолчанию — это)
 
   P('split_b', 'menu', 'Доля ккал: завтрак', '%', 25),
   P('split_l', 'menu', 'Доля ккал: обед-перекус', '%', 25),
@@ -911,6 +911,7 @@ function virtualGroup(s, d) {
 // Дополняет сохранённый поход полями, которых в старых данных нет
 function ensureTrip(t) {
   t.simple = { ...defaultSimple(), ...(t.simple || {}) };
+  t.food ||= {}; if (t.food.reservePct == null) t.food.reservePct = 0; if (t.food.reserveDays == null) t.food.reserveDays = 1; t.reserveItem ||= {};
   t.buyers ||= []; t.buyDept ||= {}; t.buyItem ||= {};
   t.prefs ||= {}; if (!('kcalGoal' in t.prefs)) t.prefs.kcalGoal = null; if (t.prefs.restPct == null) t.prefs.restPct = 80;
   return t;
@@ -1030,6 +1031,8 @@ const F = {
   food: [
     { k: 'hot', label: 'Горячих приёмов в день', type: 'seg', opts: [['2', '2'], ['3', '3']] },
     { k: 'lunchHot', label: 'Обед горячий (иначе перекус)', type: 'check' },
+    { k: 'reservePct', label: 'Резерв продуктов', type: 'number', unit: '% от количества', help: 'Сколько добавить к закупке каждого продукта сверх меню: любое число, 0 — без резерва. Для отдельного продукта своё значение задаётся в «Покупки» → «Список». Меню и калории от резерва не меняются.' },
+    { k: 'reserveDays', label: 'Аварийный запас', type: 'number', unit: 'дн', help: 'Калорийные продукты (орехи, шоколад, халва…) на столько дней сверх меню. 0 — без аварийного запаса.' },
   ],
   prefs: [
     { k: 'mode', label: 'Режим раскладки', type: 'seg', opts: [['hungry', 'Голодная'], ['std', 'Стандарт'], ['full', 'Сытая'], ['custom', 'Своя']] },
@@ -1115,7 +1118,7 @@ const views = {
       <div class="btnrow"><button class="btn" id="addmeal">Добавить приём</button><button class="btn ghost" id="resetmeals">Стандартный план</button></div>`;
     return {
       html: `${back('', 'Поход')}<h2>Питание и заброски</h2>${mealsHtml}<div id="foodf">${form(F.food, trip.food)}</div>
-        <p class="muted">Аварийный запас: ${getParam('reserve_days')} дн. (меняется в Настройках)</p><h3>Заброски</h3>
+        <h3>Заброски</h3>
         ${trip.drops.map((d, i) => `<div class="drop">${form(F.drop, d)}<button class="mini" data-deldrop="${i}">Удалить</button></div>`).join('') || '<p class="empty">Заброски не заданы.</p>'}
         <button class="btn" id="adddrop">Добавить заброску</button>`,
       bind(root) {
@@ -2474,7 +2477,8 @@ function sig(trip, pset, mset, P) {
 
 // Возвращает {calc, menu, P, pset, mset}; пересобирает меню, если исходные данные изменились (закреплённое остаётся)
 function ensure(force = false) {
-  const trip = getTrip(), P = allParams(), calc = computeTrip(trip, P), { pset, mset } = sets(trip);
+  const trip = getTrip(), P = allParams(); if (trip.food?.reserveDays != null) P.reserve_days = trip.food.reserveDays; // аварийный запас задаётся у похода
+  const calc = computeTrip(trip, P), { pset, mset } = sets(trip);
   if (!calc.summary) return { calc, menu: null, P, pset, mset };
   const s = sig(trip, pset, mset, P);
   if (force || !trip.menu || trip.menu.sig !== s || trip.menu.days.length !== trip.days.length) {
@@ -2669,7 +2673,7 @@ function buildSummary(D) {
   const factK = sum(menu.days, d => sum(Object.values(d), e => itemsKcal(e?.items || [], prods))) / n / days;
   const factP = sum(items, i => (byId.get(i.pid)?.p || 0) * i.g / 100) / n / days;
   const goalK = S.kcalPerPersonDay, goalP = sum(calc.days, d => d.mac.p) / calc.days.length;
-  const buyG = sum(rows, r => r.buy), cost = sum(rows, r => r.price), reserveG = sum(rows, r => r.reserve);
+  const buyG = sum(rows, r => r.buy), cost = sum(rows, r => r.price), reserveG = sum(rows, r => r.reserve + (r.resG || 0));
   const ratio = goalK ? factK / goalK : 0, okK = ratio >= 0.9 && ratio <= 1.1;
   const noPrice = rows.filter(r => !r.p.price), noPack = rows.filter(r => !r.p.pack), noKcal = rows.filter(r => r.p.kcal == null);
   const noRecipe = counted.filter(c => c.e && !c.e.empty && c.e.name && !c.e.items?.length);
@@ -2697,7 +2701,7 @@ function buildSummary(D) {
     check('Все упаковки заполнены', noPack.map(r => r.p.name)),
     check('У всех продуктов есть КБЖУ', noKcal.map(r => r.p.name)),
     { label: 'Меню не пустое', ok: filled.length > 0, text: filled.length ? 'OK' : 'нет ни одного приёма' },
-    { label: 'Резерв закупки', ok: true, text: `${P.reserve_days} дн. (≈ ${buyG ? Math.round(reserveG / Math.max(1, buyG - reserveG) * 100) : 0}% к рациону)` },
+    { label: 'Резерв закупки', ok: true, text: `${trip.food?.reservePct ?? 0}% от количества + аварийный запас ${P.reserve_days} дн. (всего ≈ ${buyG ? Math.round(reserveG / Math.max(1, buyG - reserveG) * 100) : 0}% к рациону)` },
   ];
   if (personal) checks.push({ label: 'Приёмы «в личке»', ok: true, text: `${personal} (в раскладку не входят)` });
   const warnings = menu.warnings || [];
@@ -2764,8 +2768,9 @@ function shopData() {
   reserve.forEach(it => add(it.pid, it.g, 'reserve'));
   const rows = Object.entries(need).map(([pid, v]) => {
     const p = byId(pid); if (!p) return null;
-    const total = v.g + v.reserve, packs = p.pack ? Math.ceil(total / p.pack - 1e-9) : null;
-    return { p, g: v.g, reserve: v.reserve, total, packs, buy: opts.round && packs ? packs * p.pack : total, price: p.price && packs ? packs * p.price : (p.price ? p.price * total / (p.pack || 100) : 0), dept: SHOP_DEPT[p.cat] || 'Прочее' };
+    const resPct = Math.max(0, +(trip.reserveItem?.[pid] ?? trip.food?.reservePct ?? 0) || 0), resG = Math.round(v.g * resPct / 100 * 10) / 10; // резерв в % от количества продукта
+    const total = v.g + v.reserve + resG, packs = p.pack ? Math.ceil(total / p.pack - 1e-9) : null;
+    return { p, g: v.g, reserve: v.reserve, resPct, resG, total, packs, buy: opts.round && packs ? packs * p.pack : total, price: p.price && packs ? packs * p.price : (p.price ? p.price * total / (p.pack || 100) : 0), dept: SHOP_DEPT[p.cat] || 'Прочее' };
   }).filter(Boolean);
   return { trip, calc, menu, P, pset, rows, n, reserve };
 }
@@ -2810,9 +2815,9 @@ const views = {
     if (tab === 'list') {
       const sum = rows.reduce((s, r) => s + r.price, 0);
       body = `<div class="fld"><label>Крупный шрифт (для магазина)</label><div class="ctl"><input type="checkbox" id="big"${ctx.state.big ? ' checked' : ''}></div></div>
-        ${DEPT_ORDER.map(dep => { const r = rows.filter(x => x.dept === dep).sort((a, b) => a.p.name.localeCompare(b.p.name)); return r.length ? `<h3>${dep}</h3><ul class="list shop">${r.map(x => `<li class="${b[x.p.id] ? 'done' : ''}"><label><input type="checkbox" data-buy="${x.p.id}"${b[x.p.id] ? ' checked' : ''}><span><b>${esc(x.p.name)}</b><br><span class="muted small">нужно ${n0(x.total)} г${x.reserve ? ` (в т.ч. запас ${n0(x.reserve)})` : ''}${x.packs && opts.round ? ` → ${x.packs} × ${x.p.pack} г = ${n0(x.buy)} г` : ''}</span></span></label>${x.price ? `<span>${n0(x.price)} ${opts.currency}</span>` : ''}</li>`).join('')}</ul>` : ''; }).join('')}
+        ${DEPT_ORDER.map(dep => { const r = rows.filter(x => x.dept === dep).sort((a, b) => a.p.name.localeCompare(b.p.name)); return r.length ? `<h3>${dep}</h3><ul class="list shop">${r.map(x => `<li class="${b[x.p.id] ? 'done' : ''}"><label><input type="checkbox" data-buy="${x.p.id}"${b[x.p.id] ? ' checked' : ''}><span><b>${esc(x.p.name)}</b><br><span class="muted small">нужно ${n0(x.total)} г${x.resG ? ` (в т.ч. резерв ${x.resPct}% = ${n0(x.resG)})` : ''}${x.reserve ? ` (в т.ч. аварийный запас ${n0(x.reserve)})` : ''}${x.packs && opts.round ? ` → ${x.packs} × ${x.p.pack} г = ${n0(x.buy)} г` : ''}</span></span></label><span class="muted small">резерв <input data-rp="${x.p.id}" type="number" min="0" step="any" style="width:56px" value="${trip.reserveItem?.[x.p.id] ?? ''}" placeholder="${trip.food?.reservePct ?? 0}"> %</span>${x.price ? `<span>${n0(x.price)} ${opts.currency}</span>` : ''}</li>`).join('')}</ul>` : ''; }).join('')}
         ${sum ? `<p><b>Итого ${n0(sum)} ${opts.currency}</b> · с человека ${n0(sum / n)} ${opts.currency}</p>` : '<p class="muted small">Цены не заданы. Их можно указать в карточке продукта.</p>'}
-        <p class="muted small">Аварийный запас на ${P.reserve_days} дн. включён в список.</p>`;
+        <p class="muted small">Резерв ${trip.food?.reservePct ?? 0}% от количества (для отдельных продуктов можно задать своё) и аварийный запас на ${P.reserve_days} дн. включены в список.</p>`;
     } else if (tab === 'buy') {
       ensureBuyers(trip);
       const opt = sel => '<option value="">не назначено</option>' + trip.buyers.map(x => '<option value="' + x.id + '"' + (x.id === sel ? ' selected' : '') + '>' + esc(x.name) + '</option>').join(''), sp = splitByBuyer(trip, rows);
@@ -2852,6 +2857,7 @@ const views = {
         root.querySelectorAll('[data-st]').forEach(x => x.onclick = () => { ctx.state.shopTab = x.dataset.st; ctx.rerender(); });
         root.querySelector('#big')?.addEventListener('change', e => { ctx.state.big = e.target.checked; ctx.rerender(); });
         root.querySelectorAll('[data-buy]').forEach(c => c.onchange = () => { b[c.dataset.buy] = c.checked; saveTrip(); ctx.rerender(); });
+        root.querySelectorAll('[data-rp]').forEach(c => c.onchange = () => { const v = c.value.trim(); trip.reserveItem ||= {}; if (v === '') delete trip.reserveItem[c.dataset.rp]; else trip.reserveItem[c.dataset.rp] = Math.max(0, +v || 0); saveTrip(); ctx.rerender(); });
         if (tab === 'buy') {
           const rer = () => { saveTrip(); ctx.rerender(); }, bd = ctx.buyerData, say = (btn, ok) => { btn.textContent = ok ? 'Скопировано' : 'Не удалось'; };
           root.querySelector('#addbuyer').onclick = () => { addBuyer(trip); rer(); };
@@ -3299,7 +3305,7 @@ const views = {
 
   params(group, ctx) {
     group = group || 'walk';
-    const list = PARAMS.filter(p => p.group === group);
+    const list = PARAMS.filter(p => p.group === group && !p.hidden);
     return {
       html: `${back('settings')}<h2>Параметры расчёта</h2>
         <div class="chips">${GROUPS.map(([g, n]) => `<button data-grp="${g}" class="${g === group ? 'on' : ''}">${n}</button>`).join('')}</div>

@@ -62,6 +62,8 @@ const F = {
   food: [
     { k: 'hot', label: 'Горячих приёмов в день', type: 'seg', opts: [['2', '2'], ['3', '3']] },
     { k: 'lunchHot', label: 'Обед горячий (иначе перекус)', type: 'check' },
+    { k: 'reservePct', label: 'Резерв продуктов', type: 'number', unit: '% от количества', help: 'Сколько добавить к закупке каждого продукта сверх меню: любое число, 0 — без резерва. Для отдельного продукта своё значение задаётся в «Покупки» → «Список». Меню и калории от резерва не меняются.' },
+    { k: 'reserveDays', label: 'Аварийный запас', type: 'number', unit: 'дн', help: 'Калорийные продукты (орехи, шоколад, халва…) на столько дней сверх меню. 0 — без аварийного запаса.' },
   ],
   prefs: [
     { k: 'mode', label: 'Режим раскладки', type: 'seg', opts: [['hungry', 'Голодная'], ['std', 'Стандарт'], ['full', 'Сытая'], ['custom', 'Своя']] },
@@ -147,7 +149,7 @@ export const views = {
       <div class="btnrow"><button class="btn" id="addmeal">Добавить приём</button><button class="btn ghost" id="resetmeals">Стандартный план</button></div>`;
     return {
       html: `${back('', 'Поход')}<h2>Питание и заброски</h2>${mealsHtml}<div id="foodf">${form(F.food, trip.food)}</div>
-        <p class="muted">Аварийный запас: ${getParam('reserve_days')} дн. (меняется в Настройках)</p><h3>Заброски</h3>
+        <h3>Заброски</h3>
         ${trip.drops.map((d, i) => `<div class="drop">${form(F.drop, d)}<button class="mini" data-deldrop="${i}">Удалить</button></div>`).join('') || '<p class="empty">Заброски не заданы.</p>'}
         <button class="btn" id="adddrop">Добавить заброску</button>`,
       bind(root) {

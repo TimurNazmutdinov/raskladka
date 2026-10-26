@@ -20,7 +20,7 @@ export function buildSummary(D) {
   const factK = sum(menu.days, d => sum(Object.values(d), e => itemsKcal(e?.items || [], prods))) / n / days;
   const factP = sum(items, i => (byId.get(i.pid)?.p || 0) * i.g / 100) / n / days;
   const goalK = S.kcalPerPersonDay, goalP = sum(calc.days, d => d.mac.p) / calc.days.length;
-  const buyG = sum(rows, r => r.buy), cost = sum(rows, r => r.price), reserveG = sum(rows, r => r.reserve);
+  const buyG = sum(rows, r => r.buy), cost = sum(rows, r => r.price), reserveG = sum(rows, r => r.reserve + (r.resG || 0));
   const ratio = goalK ? factK / goalK : 0, okK = ratio >= 0.9 && ratio <= 1.1;
   const noPrice = rows.filter(r => !r.p.price), noPack = rows.filter(r => !r.p.pack), noKcal = rows.filter(r => r.p.kcal == null);
   const noRecipe = counted.filter(c => c.e && !c.e.empty && c.e.name && !c.e.items?.length);
@@ -48,7 +48,7 @@ export function buildSummary(D) {
     check('Все упаковки заполнены', noPack.map(r => r.p.name)),
     check('У всех продуктов есть КБЖУ', noKcal.map(r => r.p.name)),
     { label: 'Меню не пустое', ok: filled.length > 0, text: filled.length ? 'OK' : 'нет ни одного приёма' },
-    { label: 'Резерв закупки', ok: true, text: `${P.reserve_days} дн. (≈ ${buyG ? Math.round(reserveG / Math.max(1, buyG - reserveG) * 100) : 0}% к рациону)` },
+    { label: 'Резерв закупки', ok: true, text: `${trip.food?.reservePct ?? 0}% от количества + аварийный запас ${P.reserve_days} дн. (всего ≈ ${buyG ? Math.round(reserveG / Math.max(1, buyG - reserveG) * 100) : 0}% к рациону)` },
   ];
   if (personal) checks.push({ label: 'Приёмы «в личке»', ok: true, text: `${personal} (в раскладку не входят)` });
   const warnings = menu.warnings || [];
