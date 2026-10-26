@@ -9,6 +9,7 @@ import { repo as plrepo } from './plstore.js';
 import { planMenu, skippedCount } from './plan.js';
 import { openLoad } from './loadview.js';
 import { getTrip, saveTrip } from './trip.js';
+import { missing } from './tripdays.js';
 import { exportExcel, buildWorkbook } from './exportxlsx.js';
 import { esc, modal } from './ui.js';
 
@@ -101,17 +102,19 @@ function plansDialog(ctx) {
 export const views = {
   calc(_, ctx) {
     const trip = getTrip(), { calc, menu, P, pset, mset } = ensure();
+    const miss = missing(trip);
     const sel = `<div class="btnrow selrow"><label>Набор продуктов <select id="selp">${prepo.list().map(s => `<option value="${s.id}"${s.id === pset?.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
       <label>Набор меню <select id="selm">${mrepo.list().map(s => `<option value="${s.id}"${s.id === mset?.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
       <label>Меню (план) <select id="selpl"><option value="">— нет (генератор) —</option>${plrepo.list().map(s => `<option value="${s.id}"${s.id === trip.planId ? ' selected' : ''}>${s.readonly ? '🔒 ' : ''}${esc(s.name)}</option>`).join('')}</select></label>
       <button class="btn ghost" id="loadpl">Загрузить меню (план)</button><button class="btn ghost" id="mgpl">Планы…</button>
-      <button class="btn" id="sm" style="margin-left:auto">Сводка расчёта</button><button class="btn" id="xl">Выгрузить в Excel</button></div>`;
+      <button class="btn" id="calcgo" ${miss.length ? 'disabled' : ''}>Рассчитать</button><button class="btn" id="sm" style="margin-left:auto">Сводка расчёта</button><button class="btn" id="xl">Выгрузить в Excel</button></div>${miss.length ? `<p class="warnmsg small">Для кнопки «Рассчитать» не хватает: ${esc(miss.join('; '))}. Заполните вкладку «Поход».</p>` : ''}`;
     const bindSel = root => {
       root.querySelector('#selp').onchange = e => { trip.productSet = e.target.value; const m = mrepo.list().find(x => x.productSetId === e.target.value); if (m && mrepo.get(trip.menuSet)?.productSetId !== e.target.value) trip.menuSet = m.id; saveTrip(); ctx.rerender(); };
       root.querySelector('#selm').onchange = e => { trip.menuSet = e.target.value; const m = mrepo.get(e.target.value); if (m?.productSetId && prepo.get(m.productSetId)) trip.productSet = m.productSetId; saveTrip(); ctx.rerender(); };
       root.querySelector('#selpl').onchange = e => { const pl = plrepo.get(e.target.value); trip.planId = pl ? pl.id : null; if (pl) { if (prepo.get(pl.productSetId)) trip.productSet = pl.productSetId; if (mrepo.get(pl.dishSetId)) trip.menuSet = pl.dishSetId; } trip.menu = null; saveTrip(); ctx.rerender(); };
       root.querySelector('#loadpl').onclick = () => openLoad(ctx, { only: 'plan', after: () => ctx.rerender() });
       root.querySelector('#mgpl').onclick = () => plansDialog(ctx);
+      root.querySelector('#calcgo').onclick = () => { ensure(true); ctx.rerender(); }; // пересчитать и заново собрать меню (закреплённое остаётся)
       root.querySelector('#sm').onclick = () => ctx.go('summary');
       root.querySelector('#xl').onclick = () => exportExcel(exportData()).catch(err => alert('Не удалось выгрузить: ' + err.message));
     };

@@ -852,12 +852,10 @@ function daysSection(trip, save, ctx) {
       ${prof}
       <h3>Дни${trip.days.length ? `: ${trip.days.length}` : ''}</h3>
       ${trip.days.length ? `<div class="tbl"><table class="dtable">${hdr}${rows}</table></div><p class="muted small">Двойной щелчок по строке открывает окно дня. ${goalSet ? 'Цель по калориям задана: данные по дням необязательны, их можно ввести для уточнения расчёта.' : 'Подсвеченное обязательно заполнить.'}</p>` : '<p class="empty">Дней пока нет.</p>'}
-      <div class="btnrow"><button class="btn" id="calc" ${miss.length ? 'disabled' : ''}>Рассчитать</button></div>
       ${miss.length ? `<p class="warnmsg small">Не хватает: ${esc(miss.join('; '))}</p>` : ''}`,
     bind(root) {
       root.querySelector('#bparams').onclick = () => openParams(trip, save, ctx);
       root.querySelector('#bcond').onclick = () => openCond(trip, save, ctx);
-      root.querySelector('#calc')?.addEventListener('click', () => { if (!miss.length) { ctx.state.tab = 'calc'; ctx.go(''); } });
       root.querySelectorAll('tr[data-d]').forEach(tr2 => tr2.ondblclick = () => openDay(trip, +tr2.dataset.d, save, ctx));
       root.querySelectorAll('[data-e]').forEach(b => b.onclick = () => openDay(trip, +b.dataset.e, save, ctx));
       root.querySelector('#bclear')?.addEventListener('click', () => { if (confirm('Убрать трек? Дни останутся, их можно править вручную.')) { delete trip.track; trip.days.forEach(d => { d.auto = null; }); rebuild(trip); save(); ctx.rerender(); } });
@@ -2631,6 +2629,7 @@ const {repo: plrepo} = __m['plstore.js'];
 const {planMenu, skippedCount} = __m['plan.js'];
 const {openLoad} = __m['loadview.js'];
 const {getTrip, saveTrip} = __m['trip.js'];
+const {missing} = __m['tripdays.js'];
 const {exportExcel, buildWorkbook} = __m['exportxlsx.js'];
 const {esc, modal} = __m['ui.js'];
 
@@ -2723,17 +2722,19 @@ function plansDialog(ctx) {
 const views = {
   calc(_, ctx) {
     const trip = getTrip(), { calc, menu, P, pset, mset } = ensure();
+    const miss = missing(trip);
     const sel = `<div class="btnrow selrow"><label>Набор продуктов <select id="selp">${prepo.list().map(s => `<option value="${s.id}"${s.id === pset?.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
       <label>Набор меню <select id="selm">${mrepo.list().map(s => `<option value="${s.id}"${s.id === mset?.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
       <label>Меню (план) <select id="selpl"><option value="">— нет (генератор) —</option>${plrepo.list().map(s => `<option value="${s.id}"${s.id === trip.planId ? ' selected' : ''}>${s.readonly ? '🔒 ' : ''}${esc(s.name)}</option>`).join('')}</select></label>
       <button class="btn ghost" id="loadpl">Загрузить меню (план)</button><button class="btn ghost" id="mgpl">Планы…</button>
-      <button class="btn" id="sm" style="margin-left:auto">Сводка расчёта</button><button class="btn" id="xl">Выгрузить в Excel</button></div>`;
+      <button class="btn" id="calcgo" ${miss.length ? 'disabled' : ''}>Рассчитать</button><button class="btn" id="sm" style="margin-left:auto">Сводка расчёта</button><button class="btn" id="xl">Выгрузить в Excel</button></div>${miss.length ? `<p class="warnmsg small">Для кнопки «Рассчитать» не хватает: ${esc(miss.join('; '))}. Заполните вкладку «Поход».</p>` : ''}`;
     const bindSel = root => {
       root.querySelector('#selp').onchange = e => { trip.productSet = e.target.value; const m = mrepo.list().find(x => x.productSetId === e.target.value); if (m && mrepo.get(trip.menuSet)?.productSetId !== e.target.value) trip.menuSet = m.id; saveTrip(); ctx.rerender(); };
       root.querySelector('#selm').onchange = e => { trip.menuSet = e.target.value; const m = mrepo.get(e.target.value); if (m?.productSetId && prepo.get(m.productSetId)) trip.productSet = m.productSetId; saveTrip(); ctx.rerender(); };
       root.querySelector('#selpl').onchange = e => { const pl = plrepo.get(e.target.value); trip.planId = pl ? pl.id : null; if (pl) { if (prepo.get(pl.productSetId)) trip.productSet = pl.productSetId; if (mrepo.get(pl.dishSetId)) trip.menuSet = pl.dishSetId; } trip.menu = null; saveTrip(); ctx.rerender(); };
       root.querySelector('#loadpl').onclick = () => openLoad(ctx, { only: 'plan', after: () => ctx.rerender() });
       root.querySelector('#mgpl').onclick = () => plansDialog(ctx);
+      root.querySelector('#calcgo').onclick = () => { ensure(true); ctx.rerender(); }; // пересчитать и заново собрать меню (закреплённое остаётся)
       root.querySelector('#sm').onclick = () => ctx.go('summary');
       root.querySelector('#xl').onclick = () => exportExcel(exportData()).catch(err => alert('Не удалось выгрузить: ' + err.message));
     };
@@ -3198,7 +3199,7 @@ const views = {
   features() {
     const L = [
       ['Запуск', 'Открывается двойным щелчком по Раскладка.html в Chrome или Edge, без сервера и установки. Данные хранятся в браузере; переносить между компьютерами можно через «Резервную копию».'],
-      ['Поход', 'GPX-трек: берутся только координаты и высоты. Окна «Параметры похода» (дата, число дней, днёвки и запасные дни, разбивка трека на дни поровну по нагрузке), «Условия» на весь поход и «День N» (двойной щелчок по строке таблицы). Профиль высот с перетаскиваемыми ночёвками. Группа, снаряжение, питание, заброски, предпочтения, «обед весь день». Выбор набора продуктов и набора меню. «Рассчитать» включается, когда заполнено всё обязательное.'],
+      ['Поход', 'GPX-трек: берутся только координаты и высоты. Окна «Параметры похода» (дата, число дней, днёвки и запасные дни, разбивка трека на дни поровну по нагрузке), «Условия» на весь поход и «День N» (двойной щелчок по строке таблицы). Профиль высот с перетаскиваемыми ночёвками. Группа, снаряжение, питание, заброски, предпочтения, «обед весь день». Выбор набора продуктов и набора меню. Кнопка «Рассчитать» находится на вкладке «Расчёт» и включается, когда заполнено всё обязательное.'],
       ['Продукты', 'Вкладки-наборы (до 10): переименовать, дублировать, удалить, в файл, перетаскивание для порядка. «+ Набор»: пустой, копия, из файла .xlsx/.csv/.json с предпросмотром и ошибками построчно, вручную. Кнопки «Выбрать все», «Снять все выделение», «Инвертировать» и счётчик. Встроенные наборы «Базовый» и «Расширенный». Свой продукт: поиск КБЖУ в Open Food Facts, штрихкод, ввод вручную.'],
       ['Меню', 'Вкладки-наборы меню (до 10) с теми же действиями. Редактор блюда: продукты с граммами на человека (база, мин, макс), условия применения, время варки, включено/выключено. Проверка продуктов блюд по набору продуктов с вариантами «включить» и «заменить». Встроенные меню «Базовое» и «Расширенное», шаблон файла.'],
       ['Расчёт', 'Потребность каждого участника по дням: обмен, ходьба по Пандольфу, холод, высота, личные коэффициенты; «Почему столько?» показывает расчёт по шагам. Справа сетка меню день × приём пищи, замена, закрепление и удаление блюд, ползунок сытости. Наборы переключаются сразу. Предупреждения о покрытии, минимумах и недостающих продуктах. Выгрузка в Excel.'],

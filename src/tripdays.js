@@ -180,12 +180,10 @@ export function daysSection(trip, save, ctx) {
       ${prof}
       <h3>Дни${trip.days.length ? `: ${trip.days.length}` : ''}</h3>
       ${trip.days.length ? `<div class="tbl"><table class="dtable">${hdr}${rows}</table></div><p class="muted small">Двойной щелчок по строке открывает окно дня. ${goalSet ? 'Цель по калориям задана: данные по дням необязательны, их можно ввести для уточнения расчёта.' : 'Подсвеченное обязательно заполнить.'}</p>` : '<p class="empty">Дней пока нет.</p>'}
-      <div class="btnrow"><button class="btn" id="calc" ${miss.length ? 'disabled' : ''}>Рассчитать</button></div>
       ${miss.length ? `<p class="warnmsg small">Не хватает: ${esc(miss.join('; '))}</p>` : ''}`,
     bind(root) {
       root.querySelector('#bparams').onclick = () => openParams(trip, save, ctx);
       root.querySelector('#bcond').onclick = () => openCond(trip, save, ctx);
-      root.querySelector('#calc')?.addEventListener('click', () => { if (!miss.length) { ctx.state.tab = 'calc'; ctx.go(''); } });
       root.querySelectorAll('tr[data-d]').forEach(tr2 => tr2.ondblclick = () => openDay(trip, +tr2.dataset.d, save, ctx));
       root.querySelectorAll('[data-e]').forEach(b => b.onclick = () => openDay(trip, +b.dataset.e, save, ctx));
       root.querySelector('#bclear')?.addEventListener('click', () => { if (confirm('Убрать трек? Дни останутся, их можно править вручную.')) { delete trip.track; trip.days.forEach(d => { d.auto = null; }); rebuild(trip); save(); ctx.rerender(); } });
