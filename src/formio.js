@@ -33,10 +33,16 @@ function tableOf(rows, wanted) {
   for (let h = 0; h < Math.min(12, rows.length); h++) {
     const hdr = (rows[h] || []).map(norm), cols = {};
     for (const f of wanted) { const i = hdr.findIndex(x => SYNN[f].includes(x)); if (i >= 0) cols[f] = i; }
-    if (Object.keys(cols).length >= 2) return { h, cols, rows: rows.slice(h + 1).map((r, k) => ({ r, ln: h + 2 + k })) };
+    if (Object.keys(cols).length >= 2) {
+      const data = rows.slice(h + 1), used = new Set(Object.values(cols));
+      // колонки без заголовка, в которых есть данные (например, описание блюда, дописанное пользователем): их можно прочитать и сообщить об этом
+      const extra = []; for (let i = 0; i < Math.max(hdr.length, ...data.map(r => r.length)); i++) if (!used.has(i) && !hdr[i] && data.some(r => r[i] != null && r[i] !== '')) extra.push(i);
+      return { h, cols, extra, rows: data.map((r, k) => ({ r, ln: h + 2 + k })) };
+    }
   }
   return null;
 }
+const colL = i => String.fromCharCode(65 + i); // буква колонки (A…Z)
 const PROD_F = ['name', 'cat', 'kcal', 'p', 'f', 'c', 'baseUnit', 'pack', 'unitBuy', 'price', 'inPurchase', 'shelf', 'fresh', 'tags', 'note', 'id', 'src'];
 const DISH_F = ['dish', 'meal', 'product', 'qty', 'qtyGroup', 'unit', 'min', 'max', 'cond', 'cook', 'desc', 'lineNote', 'dishId', 'src'];
 const PLAN_F = ['day', 'meal', 'dish', 'portions', 'comment', 'dishId', 'src'];
@@ -53,8 +59,9 @@ export function detect(rows, sheetName) {
 }
 
 export function parseProducts(rows, sheet) {
-  const t = tableOf(rows, PROD_F), items = [], errors = [];
+  const t = tableOf(rows, PROD_F), items = [], errors = [], notes = [];
   if (!t || t.cols.name == null) return { items, errors: ['нет колонки «Название»'] };
+  if (t.cols.note == null && t.extra.length) { t.cols.note = t.extra[0]; notes.push(`колонка ${colL(t.extra[0])} без заголовка прочитана как «Примечание»`); }
   const g = (r, f) => (t.cols[f] == null ? undefined : r[t.cols[f]]);
   for (const { r, ln } of t.rows) {
     if (!r.some(v => v != null && v !== '')) continue;
@@ -65,12 +72,13 @@ export function parseProducts(rows, sheet) {
     const catO = g(r, 'cat'), pur = g(r, 'inPurchase');
     items.push({ name: txt(name), catOrig: catO == null ? null : txt(catO), cat: catKey(catO), kcal: num(g(r, 'kcal')), p: num(g(r, 'p')), f: num(g(r, 'f')), c: num(g(r, 'c')), baseUnit: g(r, 'baseUnit') == null ? null : txt(g(r, 'baseUnit')), pack: num(g(r, 'pack')), unit: g(r, 'unitBuy') == null ? null : txt(g(r, 'unitBuy')), price: num(g(r, 'price')), inPurchase: pur == null ? null : /^(да|yes|1|true|\+)$/i.test(txt(pur).trim()), shelf: num(g(r, 'shelf')), fresh: /^(да|yes|1|true)$/i.test(txt(g(r, 'fresh')).trim()), tags: txt(g(r, 'tags')), note: g(r, 'note') == null ? null : txt(g(r, 'note')), srcId: g(r, 'id') ?? null, srcCell: g(r, 'src') == null ? `${sheet}, строка ${ln}` : txt(g(r, 'src')), ln });
   }
-  return { items, errors };
+  return { items, errors, notes };
 }
 
 export function parseDishes(rows, sheet) {
-  const t = tableOf(rows, DISH_F), errors = [], byKey = new Map(), dishes = [];
+  const t = tableOf(rows, DISH_F), errors = [], notes = [], byKey = new Map(), dishes = [];
   if (!t || t.cols.dish == null || t.cols.product == null) return { dishes, errors: ['нет колонок «Блюдо» и «Продукт»'] };
+  if (t.cols.desc == null && t.extra.length) { t.cols.desc = t.extra[0]; notes.push(`колонка ${colL(t.extra[0])} без заголовка прочитана как «Описание блюда»`); }
   const g = (r, f) => (t.cols[f] == null ? undefined : r[t.cols[f]]);
   for (const { r, ln } of t.rows) {
     if (!r.some(v => v != null && v !== '')) continue;
@@ -89,7 +97,7 @@ export function parseDishes(rows, sheet) {
     }
     d.ing.push({ name: txt(pn), g: qq, unit: g(r, 'unit') == null ? null : txt(g(r, 'unit')), note: g(r, 'lineNote') == null ? null : txt(g(r, 'lineNote')), min: num(g(r, 'min') ?? undefined), max: num(g(r, 'max') ?? undefined), perGroup: q == null && qg != null, srcCell: g(r, 'src') == null ? `${sheet}, строка ${ln}` : txt(g(r, 'src')) });
   }
-  return { dishes, errors };
+  return { dishes, errors, notes };
 }
 
 export function parsePlan(rows, sheet) {
@@ -137,30 +145,16 @@ export const FORM_HEAD = {
   plan: ['День', 'Приём пищи', 'Блюдо', 'Порций', 'Комментарий', 'ID блюда', 'Источник'],
   params: ['Параметр', 'Значение', 'Примечание', 'Формула (как в источнике)', 'Источник'],
 };
-// Простой шаблон для пользователя: только нужные колонки + лист «Как заполнять». Загрузчик по-прежнему понимает и расширенные колонки (FORM_HEAD).
+// Простой шаблон для пользователя: только нужные колонки. Загрузчик по-прежнему понимает и расширенные колонки (FORM_HEAD).
 export const SIMPLE_HEAD = {
   products: ['Название', 'Ккал на 100 г', 'Белки на 100 г', 'Жиры на 100 г', 'Углеводы на 100 г', 'Категория', 'Упаковка, г', 'Цена'],
-  dishes: ['Блюдо', 'Приём пищи', 'Продукт', 'Граммы на 1 человека'],
+  dishes: ['Блюдо', 'Приём пищи', 'Продукт', 'Граммы на 1 человека', 'Описание блюда'],
   plan: ['День', 'Приём пищи', 'Блюдо'],
 };
+// Две вкладки: можно заполнить обе или любую одну. Меню-план (лист «План») загрузчик тоже понимает, но в простой шаблон он не входит.
 export const simpleFormSheets = () => [
-  { name: 'Как заполнять', rows: [
-    ['Как заполнять шаблон'], [],
-    ['1. Заполните только те листы, которые нужны: «Продукты», «Блюда», «План». Остальные оставьте пустыми.'],
-    ['2. Заголовки (первая строка) не меняйте. Строки с ошибками пропускаются, остальное загружается.'],
-    ['3. Этот лист при загрузке игнорируется.'], [],
-    ['Лист «Продукты»: что за продукт и сколько в нём энергии на 100 г.'],
-    ['   Обязательно: Название, Ккал. Остальное можно не заполнять. Пример: Гречка | 313 | 12,6 | 3,3 | 62,1 | Крупы | 800 | 95'],
-    ['Лист «Блюда»: одна строка = один продукт в блюде, количество на 1 человека в граммах.'],
-    ['   Пример: Каша гречневая | Завтрак | Гречка | 80    и    Каша гречневая | Завтрак | Масло сливочное | 10'],
-    ['   Приём пищи: Завтрак, Обед, Ужин или Перекус. Название продукта пишите как в листе «Продукты».'],
-    ['Лист «План»: какое блюдо в какой день и приём пищи. Пример: 1 | Завтрак | Каша гречневая'],
-    ['   Название блюда — как в листе «Блюда».'], [],
-    ['Килограммы, штуки, ложки и «на группу» программа сама не пересчитывает: при загрузке она предложит выбрать пересчёт.'],
-  ] },
   { name: 'Продукты', rows: [SIMPLE_HEAD.products] },
   { name: 'Блюда', rows: [SIMPLE_HEAD.dishes] },
-  { name: 'План', rows: [SIMPLE_HEAD.plan] },
 ];
 const MEAL_RU = { b: 'Завтрак', l: 'Обед', d: 'Ужин', s: 'Перекус' }, COND_RU = { any: 'любой день', rest: 'днёвка', hot: 'жара', cold: 'холод', alt3000: 'высота > 3000', first2: 'первые 2 дня' };
 const nz = v => (v == null ? null : v);

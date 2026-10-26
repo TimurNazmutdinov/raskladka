@@ -101,12 +101,19 @@ export function openLoad(ctx, { only = null, after } = {}) {
         <td><select data-tg="${i}"><option value="new"${s.target === 'new' ? ' selected' : ''}${rp.canAdd() ? '' : ' disabled'}>новая вкладка</option>${rp.list().filter(x => !x.readonly).map(x => `<option value="${x.id}"${s.target === x.id ? ' selected' : ''}>в «${esc(x.name)}»</option>`).join('')}</select>
         ${s.target === 'new' ? `<input data-nm="${i}" value="${esc(s.name)}" style="width:150px">` : `<select data-md="${i}"><option value="add"${s.mode === 'add' ? ' selected' : ''}>добавить к существующим</option><option value="replace"${s.mode === 'replace' ? ' selected' : ''}>заменить вкладку целиком</option></select>`}
         ${s.target !== 'new' && s.mode === 'add' && b.kind !== 'plan' ? `<br><select data-dp="${i}"><option value="update"${s.dup === 'update' ? ' selected' : ''}>совпадения: обновить</option><option value="skip"${s.dup === 'skip' ? ' selected' : ''}>совпадения: пропустить</option><option value="both"${s.dup === 'both' ? ' selected' : ''}>совпадения: сохранить оба</option></select>` : ''}</td>
-        <td class="small">${b.errors.length ? `<span class="warnmsg">ошибок: ${b.errors.length}</span>` : '<span class="good">ошибок нет</span>'}${nonG ? `<br><span class="muted">не считаются (единицы/КБЖУ): ${nonG}</span>` : ''}</td></tr>`;
+        <td class="small">${b.errors.length ? `<span class="warnmsg">ошибок: ${b.errors.length}</span>` : '<span class="good">ошибок нет</span>'}${(b.notes || []).length ? `<br><span class="muted">${esc(b.notes.join('; '))}</span>` : ''}${nonG ? `<br><span class="muted">не считаются (единицы/КБЖУ): ${nonG}</span>` : ''}</td></tr>`;
     }).join('');
     const errs = blocks.flatMap(b => b.errors);
     return {
       title: 'Загрузка из файла',
-      html: `<p class="muted">Шаблон Excel (листы «Продукты», «Блюда», «План»; скачайте «пустую форму»), а также .csv и .json. Файлы .xls сначала сохраните как .xlsx. Данные грузятся как в файле: ничего не исправляется и не пересчитывается. Текущий поход не меняется.</p>
+      html: `<p class="muted">Шаблон Excel («Скачать пустую форму») — две вкладки, <b>«Продукты»</b> и <b>«Блюда»</b>. Заполните обе или только одну: загрузить можно что-то одно. Ещё поддерживаются .csv и .json. Файлы .xls сначала сохраните как .xlsx.</p>
+        <details class="muted small"><summary>Как заполнить шаблон</summary>
+          <p><b>Продукты</b> (КБЖУ на 100 г): обязательно «Название» и «Ккал на 100 г»; белки, жиры, углеводы, категория, упаковка (г) и цена — по желанию. Пример: Гречка | 313 | 12,6 | 3,3 | 62,1 | Крупы и макароны | 800 | 95.</p>
+          <p><b>Блюда</b>: одна строка — один продукт в блюде, граммы на 1 человека. Приём пищи: Завтрак, Обед, Ужин или Перекус. Пример: Каша гречневая | Завтрак | Гречка | 80 и Каша гречневая | Завтрак | Масло сливочное | 10. Названия продуктов пишите как на вкладке «Продукты» (или как в вашем наборе).</p>
+          <p>Строки с ошибками пропускаются, остальное загружается. Килограммы, штуки и «на группу» программа сама не пересчитывает, а предложит выбор в окне загрузки.</p>
+          ${only === 'plan' ? '<p><b>Меню-план</b>: лист «План» с колонками «День», «Приём пищи», «Блюдо» (названия блюд как в наборе блюд).</p>' : ''}
+        </details>
+        <p class="muted"> Данные грузятся как в файле: ничего не исправляется и не пересчитывается. Текущий поход не меняется.</p>
         <div class="btnrow"><label class="btn filebtn2">Выбрать файл<input type="file" id="f" accept=".xlsx,.xls,.csv,.json" hidden></label><button class="btn ghost" id="blank">Скачать пустую форму</button>${undo ? `<button class="btn ghost" id="undo">Отменить последнюю загрузку</button>` : ''}</div>
         <p class="warnmsg">${esc(err)}</p>
         ${log ? `<h3>Готово</h3><ul class="list">${log.map(l => `<li><span>${esc(l)}</span></li>`).join('')}</ul><div class="btnrow"><button class="btn" id="done">Закрыть</button></div>` : ''}
