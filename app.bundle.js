@@ -2546,13 +2546,14 @@ const views = {
       <label>Набор меню <select id="selm">${mrepo.list().map(s => `<option value="${s.id}"${s.id === mset?.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
       <label>Меню (план) <select id="selpl"><option value="">— нет (генератор) —</option>${plrepo.list().map(s => `<option value="${s.id}"${s.id === trip.planId ? ' selected' : ''}>${s.readonly ? '🔒 ' : ''}${esc(s.name)}</option>`).join('')}</select></label>
       <button class="btn ghost" id="loadpl">Загрузить меню (план)</button><button class="btn ghost" id="mgpl">Планы…</button>
-      <button class="btn" id="xl" style="margin-left:auto">Выгрузить в Excel</button></div>`;
+      <button class="btn" id="sm" style="margin-left:auto">Сводка расчёта</button><button class="btn" id="xl">Выгрузить в Excel</button></div>`;
     const bindSel = root => {
       root.querySelector('#selp').onchange = e => { trip.productSet = e.target.value; const m = mrepo.list().find(x => x.productSetId === e.target.value); if (m && mrepo.get(trip.menuSet)?.productSetId !== e.target.value) trip.menuSet = m.id; saveTrip(); ctx.rerender(); };
       root.querySelector('#selm').onchange = e => { trip.menuSet = e.target.value; const m = mrepo.get(e.target.value); if (m?.productSetId && prepo.get(m.productSetId)) trip.productSet = m.productSetId; saveTrip(); ctx.rerender(); };
       root.querySelector('#selpl').onchange = e => { const pl = plrepo.get(e.target.value); trip.planId = pl ? pl.id : null; if (pl) { if (prepo.get(pl.productSetId)) trip.productSet = pl.productSetId; if (mrepo.get(pl.dishSetId)) trip.menuSet = pl.dishSetId; } trip.menu = null; saveTrip(); ctx.rerender(); };
       root.querySelector('#loadpl').onclick = () => openLoad(ctx, { only: 'plan', after: () => ctx.rerender() });
       root.querySelector('#mgpl').onclick = () => plansDialog(ctx);
+      root.querySelector('#sm').onclick = () => ctx.go('summary');
       root.querySelector('#xl').onclick = () => exportExcel(exportData()).catch(err => alert('Не удалось выгрузить: ' + err.message));
     };
     if (!calc.summary) return { html: `<h2>Расчёт</h2>${sel}${calc.warnings.map(w => `<p class="warnmsg">${esc(w)}</p>`).join('')}<p class="empty">Заполните вкладку «Поход»: участники с возрастом, ростом и весом и дни.</p>`, bind: bindSel };
@@ -2621,7 +2622,7 @@ function reserveItems(trip, calc, P) {
 }
 
 function shopData() {
-  const trip = getTrip(), { calc, menu, P } = ensure();
+  const trip = getTrip(), { calc, menu, P, pset } = ensure();
   if (!menu) return null;
   const n = calc.summary.n, need = {}, add = (pid, g, tag) => { need[pid] ??= { g: 0, reserve: 0 }; need[pid][tag || 'g'] += g; };
   menu.days.forEach(d => Object.values(d).forEach(e => (e?.items || []).forEach(it => add(it.pid, it.g))));
@@ -2634,7 +2635,7 @@ function shopData() {
     const total = v.g + v.reserve, packs = p.pack ? Math.ceil(total / p.pack - 1e-9) : null;
     return { p, g: v.g, reserve: v.reserve, total, packs, buy: opts.round && packs ? packs * p.pack : total, price: p.price && packs ? packs * p.price : (p.price ? p.price * total / (p.pack || 100) : 0), dept: SHOP_DEPT[p.cat] || 'Прочее' };
   }).filter(Boolean);
-  return { trip, calc, menu, P, rows, n, reserve };
+  return { trip, calc, menu, P, pset, rows, n, reserve };
 }
 
 const bought = t => (t.bought ||= {});
@@ -2722,6 +2723,119 @@ const views = {
 };
 
 return {shopData, views};
+})();
+__m['summary.js'] = (() => {
+// Сводка расчёта: показатели, проверки и закупка по категориям. Чистые функции — данные берутся из расчёта, меню и списка покупок.
+const {itemsKcal, MEALS} = __m['menu.js'];
+const {mealsOf} = __m['meals.js'];
+const {CATS} = __m['products.js'];
+
+const CAT_RU = Object.fromEntries(CATS);
+const sum = (a, f) => a.reduce((s, x) => s + f(x), 0);
+
+// D: { trip, calc, menu, P, pset, rows (из shopData), currency }
+function buildSummary(D) {
+  const { trip, calc, menu, P, pset, rows, currency = '₸' } = D, S = calc.summary, n = S.n, days = S.days, prods = pset.items, byId = new Map(prods.map(p => [p.id, p]));
+  const slots = mealsOf(trip, P);
+  const cells = menu.days.flatMap(d => slots.map(s => ({ s, e: d[s.id] })));
+  const counted = cells.filter(c => !c.e?.personal), filled = counted.filter(c => c.e?.items?.length);
+  const items = menu.days.flatMap(d => Object.values(d).flatMap(e => (e?.items || []).filter(i => !i.skip)));
+  const factK = sum(menu.days, d => sum(Object.values(d), e => itemsKcal(e?.items || [], prods))) / n / days;
+  const factP = sum(items, i => (byId.get(i.pid)?.p || 0) * i.g / 100) / n / days;
+  const goalK = S.kcalPerPersonDay, goalP = sum(calc.days, d => d.mac.p) / calc.days.length;
+  const buyG = sum(rows, r => r.buy), cost = sum(rows, r => r.price), reserveG = sum(rows, r => r.reserve);
+  const ratio = goalK ? factK / goalK : 0, okK = ratio >= 0.9 && ratio <= 1.1;
+  const noPrice = rows.filter(r => !r.p.price), noPack = rows.filter(r => !r.p.pack), noKcal = rows.filter(r => r.p.kcal == null);
+  const noRecipe = counted.filter(c => c.e && !c.e.empty && c.e.name && !c.e.items?.length);
+  const personal = cells.filter(c => c.e?.personal).length;
+
+  const indicators = [
+    { label: 'Участников, чел.', value: n },
+    { label: 'Дней, суток', value: days },
+    { label: 'Цель энергии, ккал/чел/день', value: Math.round(goalK) },
+    { label: 'Факт энергии, ккал/чел/день', value: Math.round(factK) },
+    { label: 'Цель белка, г/чел/день', value: Math.round(goalP) },
+    { label: 'Факт белка, г/чел/день', value: Math.round(factP) },
+    { label: 'Вес закупки, кг', value: +(buyG / 1000).toFixed(1) },
+    { label: 'Вода, л/чел/день (оценка)', value: +(S.water / n / days).toFixed(1) },
+    { label: 'Топливо на поход, г', value: Math.round(S.fuel) },
+    { label: `Общая стоимость, ${currency}`, value: cost ? Math.round(cost) : null },
+    { label: `Стоимость, ${currency}/чел/день`, value: cost ? Math.round(cost / n / days) : null },
+    { label: 'Заполненных приёмов меню', value: `${filled.length} из ${counted.length}` },
+    { label: 'Статус калорий', value: okK ? 'OK' : 'Проверить', status: okK ? 'ok' : 'warn', note: `факт ${Math.round(ratio * 100)}% от цели (допустимо 90–110%)` },
+  ];
+  const check = (label, bad, okText = 'OK') => ({ label, ok: !bad.length, text: bad.length ? `${bad.length}: ${bad.slice(0, 4).join(', ')}${bad.length > 4 ? '…' : ''}` : okText });
+  const checks = [
+    check('Все блюда имеют рецепт', noRecipe.map(c => c.e.name)),
+    check('Все продукты имеют цену', noPrice.map(r => r.p.name)),
+    check('Все упаковки заполнены', noPack.map(r => r.p.name)),
+    check('У всех продуктов есть КБЖУ', noKcal.map(r => r.p.name)),
+    { label: 'Меню не пустое', ok: filled.length > 0, text: filled.length ? 'OK' : 'нет ни одного приёма' },
+    { label: 'Резерв закупки', ok: true, text: `${P.reserve_days} дн. (≈ ${buyG ? Math.round(reserveG / Math.max(1, buyG - reserveG) * 100) : 0}% к рациону)` },
+  ];
+  if (personal) checks.push({ label: 'Приёмы «в личке»', ok: true, text: `${personal} (в раскладку не входят)` });
+  const warnings = menu.warnings || [];
+  if (warnings.length) checks.push({ label: 'Предупреждения меню', ok: false, text: `${warnings.length}: см. «Расчёт»` });
+
+  const cat = new Map();
+  rows.forEach(r => { const c = cat.get(r.p.cat) || { cat: r.p.cat, name: CAT_RU[r.p.cat] || r.p.cat, g: 0, cost: 0 }; c.g += r.buy; c.cost += r.price; cat.set(r.p.cat, c); });
+  const byCategory = CATS.map(([k]) => cat.get(k)).concat([...cat.values()].filter(c => !CAT_RU[c.cat])).filter(Boolean).map(c => ({ name: c.name, kg: +(c.g / 1000).toFixed(2), cost: c.cost ? Math.round(c.cost) : null }));
+  const notes = [trip.simple?.on && trip.simple.veg ? 'Есть вегетарианцы' : '', trip.simple?.on && trip.simple.noEat ? `Не едят / аллергии: ${trip.simple.noEat}` : '', trip.simple?.on && trip.simple.notes ? trip.simple.notes : '',
+    trip.prefs?.likes ? `Любимые блюда: ${trip.prefs.likes}` : '', trip.prefs?.dislikes ? `Нелюбимые блюда: ${trip.prefs.dislikes}` : ''].filter(Boolean);
+  return { indicators, checks, byCategory, totalKg: +(buyG / 1000).toFixed(2), totalCost: cost ? Math.round(cost) : null, currency, notes, name: trip.name || 'Поход' };
+}
+
+// Строки для Excel и текста
+function summaryRows(s) {
+  const v = x => (x == null ? '' : x);
+  return [
+    { name: 'Сводка', rows: [['Сводка расчёта: ' + s.name], [], ['Показатель', 'Значение', 'Примечание'], ...s.indicators.map(i => [i.label, v(i.value), i.note || '']), [], ['Проверка', 'Результат'], ...s.checks.map(c => [c.label, c.text]), ...(s.notes.length ? [[], ['Заметки группы'], ...s.notes.map(x => [x])] : [])] },
+    { name: 'Закупка по категориям', rows: [['Категория', 'Купить, кг', `Стоимость, ${s.currency}`], ...s.byCategory.map(c => [c.name, c.kg, v(c.cost)]), ['Итого', s.totalKg, v(s.totalCost)]] },
+  ];
+}
+function summaryText(s) {
+  const f = x => (typeof x === 'number' ? x.toLocaleString('ru') : x ?? '—');
+  return [`Сводка расчёта: ${s.name}`, '', ...s.indicators.map(i => `${i.label}: ${f(i.value)}${i.note ? ` (${i.note})` : ''}`), '', 'Проверки:', ...s.checks.map(c => `  ${c.ok ? '✓' : '✗'} ${c.label}: ${c.text}`), '', 'Закупка по категориям:', ...s.byCategory.map(c => `  ${c.name}: ${f(c.kg)} кг${c.cost != null ? `, ${f(c.cost)} ${s.currency}` : ''}`), `  Итого: ${f(s.totalKg)} кг${s.totalCost != null ? `, ${f(s.totalCost)} ${s.currency}` : ''}`, ...(s.notes.length ? ['', 'Заметки группы:', ...s.notes.map(x => '  ' + x)] : [])].join('\n');
+}
+
+return {buildSummary, summaryRows, summaryText};
+})();
+__m['summaryview.js'] = (() => {
+// Экран «Сводка расчёта»: показатели, проверки, закупка по категориям; выгрузка в Excel и копирование текстом.
+const {shopData} = __m['shop.js'];
+const {opts} = __m['params.js'];
+const {buildSummary, summaryRows, summaryText} = __m['summary.js'];
+const {writeXlsx, download} = __m['xlsx.js'];
+const {esc} = __m['ui.js'];
+
+const f = x => (typeof x === 'number' ? x.toLocaleString('ru') : x ?? '—');
+
+const views = {
+  summary(_, ctx) {
+    const back = `<button class="back" data-go="">‹ Расчёт</button>`;
+    const D = shopData();
+    if (!D) return { html: `${back}<h2>Сводка расчёта</h2><p class="empty">Сводка появится, когда будет рассчитано меню: заполните «Поход».</p>`, bind() {} };
+    const S = buildSummary({ trip: D.trip, calc: D.calc, menu: D.menu, P: D.P, pset: D.pset, rows: D.rows, currency: opts.currency });
+    const ind = S.indicators.map(i => `<tr><td>${esc(i.label)}</td><td class="num ${i.status === 'warn' ? 'bad' : i.status === 'ok' ? 'good' : ''}"><b>${esc(f(i.value))}</b>${i.note ? `<br><span class="muted small">${esc(i.note)}</span>` : ''}</td></tr>`).join('');
+    const chk = S.checks.map(c => `<tr><td>${esc(c.label)}</td><td class="${c.ok ? 'good' : 'bad'}">${c.ok ? '✓ ' : '✗ '}${esc(c.text)}</td></tr>`).join('');
+    const cat = S.byCategory.map(c => `<tr><td>${esc(c.name)}</td><td class="num">${f(c.kg)}</td><td class="num">${c.cost != null ? f(c.cost) : '—'}</td></tr>`).join('');
+    return {
+      html: `${back}<h2>Сводка расчёта</h2>
+        <div class="cols2"><div class="tbl"><table class="dtable"><tr><th>Показатель</th><th>Значение</th></tr>${ind}</table></div>
+        <div class="tbl"><table class="dtable"><tr><th>Проверка</th><th>Результат</th></tr>${chk}</table></div></div>
+        <h3>Закупка по категориям</h3><div class="tbl"><table class="dtable"><tr><th>Категория</th><th>Купить, кг</th><th>Стоимость, ${esc(S.currency)}</th></tr>${cat}<tr><td><b>Итого</b></td><td class="num"><b>${f(S.totalKg)}</b></td><td class="num"><b>${S.totalCost != null ? f(S.totalCost) : '—'}</b></td></tr></table></div>
+        ${S.totalCost == null ? '<p class="muted small">Цены не заданы: их можно указать в «Продукты».</p>' : ''}
+        ${S.notes.length ? `<h3>Заметки группы</h3><ul class="list">${S.notes.map(x => `<li><span>${esc(x)}</span></li>`).join('')}</ul>` : ''}
+        <div class="btnrow"><button class="btn" id="sx">Выгрузить сводку в Excel</button><button class="btn ghost" id="st">Скопировать текстом</button></div>`,
+      bind(root) {
+        root.querySelector('#sx').onclick = async () => download(`Сводка_${S.name}.xlsx`, await writeXlsx(summaryRows(S)));
+        root.querySelector('#st').onclick = async e => { try { await navigator.clipboard.writeText(summaryText(S)); e.target.textContent = 'Скопировано'; } catch { download('Сводка.txt', summaryText(S), 'text/plain'); } };
+      },
+    };
+  },
+};
+
+return {views};
 })();
 __m['extras.js'] = (() => {
 // Экраны Настроек: мои поправки, шаблоны блюд, магазин, история, отзыв после похода, резервная копия, возможности.
@@ -3147,6 +3261,7 @@ const {loadParams} = __m['params.js'];
 const {loadTrip, getTrip, saveTrip, views: tripViews} = __m['trip.js'];
 const {views: prodViews} = __m['productsview.js'];
 const {views: calcViews} = __m['calcview.js'];
+const {views: summaryViews} = __m['summaryview.js'];
 const {views: shopViews} = __m['shop.js'];
 const {views: extraViews} = __m['extras.js'];
 const {loadProducts, repo: prepo} = __m['pstore.js'];
@@ -3204,7 +3319,7 @@ const ctx = {
 };
 
 function currentView() {
-  if (state.view) return (tripViews[state.view] || prodViews[state.view] || menuViews[state.view] || calcViews[state.view] || shopViews[state.view] || extraViews[state.view] || settingsViews[state.view])(state.arg, ctx);
+  if (state.view) return (tripViews[state.view] || prodViews[state.view] || menuViews[state.view] || calcViews[state.view] || summaryViews[state.view] || shopViews[state.view] || extraViews[state.view] || settingsViews[state.view])(state.arg, ctx);
   if (state.tab === 'trip') return tripViews.main(null, ctx);
   if (state.tab === 'shop') return shopViews.shop(null, ctx);
   if (state.tab === 'calc') return calcViews.calc(null, ctx);

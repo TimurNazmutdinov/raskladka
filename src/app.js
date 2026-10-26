@@ -4,6 +4,7 @@ import { loadParams } from './params.js';
 import { loadTrip, getTrip, saveTrip, views as tripViews } from './trip.js';
 import { views as prodViews } from './productsview.js';
 import { views as calcViews } from './calcview.js';
+import { views as summaryViews } from './summaryview.js';
 import { views as shopViews } from './shop.js';
 import { views as extraViews } from './extras.js';
 import { loadProducts, repo as prepo } from './pstore.js';
@@ -61,7 +62,7 @@ const ctx = {
 };
 
 function currentView() {
-  if (state.view) return (tripViews[state.view] || prodViews[state.view] || menuViews[state.view] || calcViews[state.view] || shopViews[state.view] || extraViews[state.view] || settingsViews[state.view])(state.arg, ctx);
+  if (state.view) return (tripViews[state.view] || prodViews[state.view] || menuViews[state.view] || calcViews[state.view] || summaryViews[state.view] || shopViews[state.view] || extraViews[state.view] || settingsViews[state.view])(state.arg, ctx);
   if (state.tab === 'trip') return tripViews.main(null, ctx);
   if (state.tab === 'shop') return shopViews.shop(null, ctx);
   if (state.tab === 'calc') return calcViews.calc(null, ctx);

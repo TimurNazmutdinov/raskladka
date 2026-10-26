@@ -24,7 +24,7 @@ function reserveItems(trip, calc, P) {
 }
 
 export function shopData() {
-  const trip = getTrip(), { calc, menu, P } = ensure();
+  const trip = getTrip(), { calc, menu, P, pset } = ensure();
   if (!menu) return null;
   const n = calc.summary.n, need = {}, add = (pid, g, tag) => { need[pid] ??= { g: 0, reserve: 0 }; need[pid][tag || 'g'] += g; };
   menu.days.forEach(d => Object.values(d).forEach(e => (e?.items || []).forEach(it => add(it.pid, it.g))));
@@ -37,7 +37,7 @@ export function shopData() {
     const total = v.g + v.reserve, packs = p.pack ? Math.ceil(total / p.pack - 1e-9) : null;
     return { p, g: v.g, reserve: v.reserve, total, packs, buy: opts.round && packs ? packs * p.pack : total, price: p.price && packs ? packs * p.price : (p.price ? p.price * total / (p.pack || 100) : 0), dept: SHOP_DEPT[p.cat] || 'Прочее' };
   }).filter(Boolean);
-  return { trip, calc, menu, P, rows, n, reserve };
+  return { trip, calc, menu, P, pset, rows, n, reserve };
 }
 
 const bought = t => (t.bought ||= {});

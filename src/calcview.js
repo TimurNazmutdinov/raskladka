@@ -104,13 +104,14 @@ export const views = {
       <label>Набор меню <select id="selm">${mrepo.list().map(s => `<option value="${s.id}"${s.id === mset?.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
       <label>Меню (план) <select id="selpl"><option value="">— нет (генератор) —</option>${plrepo.list().map(s => `<option value="${s.id}"${s.id === trip.planId ? ' selected' : ''}>${s.readonly ? '🔒 ' : ''}${esc(s.name)}</option>`).join('')}</select></label>
       <button class="btn ghost" id="loadpl">Загрузить меню (план)</button><button class="btn ghost" id="mgpl">Планы…</button>
-      <button class="btn" id="xl" style="margin-left:auto">Выгрузить в Excel</button></div>`;
+      <button class="btn" id="sm" style="margin-left:auto">Сводка расчёта</button><button class="btn" id="xl">Выгрузить в Excel</button></div>`;
     const bindSel = root => {
       root.querySelector('#selp').onchange = e => { trip.productSet = e.target.value; const m = mrepo.list().find(x => x.productSetId === e.target.value); if (m && mrepo.get(trip.menuSet)?.productSetId !== e.target.value) trip.menuSet = m.id; saveTrip(); ctx.rerender(); };
       root.querySelector('#selm').onchange = e => { trip.menuSet = e.target.value; const m = mrepo.get(e.target.value); if (m?.productSetId && prepo.get(m.productSetId)) trip.productSet = m.productSetId; saveTrip(); ctx.rerender(); };
       root.querySelector('#selpl').onchange = e => { const pl = plrepo.get(e.target.value); trip.planId = pl ? pl.id : null; if (pl) { if (prepo.get(pl.productSetId)) trip.productSet = pl.productSetId; if (mrepo.get(pl.dishSetId)) trip.menuSet = pl.dishSetId; } trip.menu = null; saveTrip(); ctx.rerender(); };
       root.querySelector('#loadpl').onclick = () => openLoad(ctx, { only: 'plan', after: () => ctx.rerender() });
       root.querySelector('#mgpl').onclick = () => plansDialog(ctx);
+      root.querySelector('#sm').onclick = () => ctx.go('summary');
       root.querySelector('#xl').onclick = () => exportExcel(exportData()).catch(err => alert('Не удалось выгрузить: ' + err.message));
     };
     if (!calc.summary) return { html: `<h2>Расчёт</h2>${sel}${calc.warnings.map(w => `<p class="warnmsg">${esc(w)}</p>`).join('')}<p class="empty">Заполните вкладку «Поход»: участники с возрастом, ростом и весом и дни.</p>`, bind: bindSel };
