@@ -26,7 +26,7 @@ const b = run(mkTrip(2500), oneBreakfast, noOats);
 ok('единственный завтрак без продукта: пустой приём и пояснение с названием продукта', b.menu.days.every(d => d.b.none) && /нельзя приготовить/.test(b.menu.warnings[0]) && /овсяные хлопья/i.test(b.menu.warnings[0]));
 
 // недобор: цель выше, чем способно дать меню
-const c = run(mkTrip(9000), ms, ps);
+const c = run(mkTrip(12000), ms, ps);
 ok('недобор: предупреждение с процентом', c.menu.warnings.some(w => /недобор \d+%/.test(w)));
 // нормальный случай без предупреждений о недоборе
 ok('без недобора при цели 3000', !run(mkTrip(3000), ms, ps).menu.warnings.some(w => /недобор/.test(w)));

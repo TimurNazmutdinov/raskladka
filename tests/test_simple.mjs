@@ -34,3 +34,16 @@ ok('днёвка = 80% цели', Math.abs(r.days[1].target / 4 - 2000) < 1e-6);
 trip.prefs.kcalGoal = null;
 const r2 = E.computeTrip(trip, P);
 ok('без цели считается по нагрузке', r2.days[0].target / 4 !== 2500 && r2.days[0].cover > 0);
+
+// простой выезд: данные дней и участников не используются, цель по умолчанию из параметров
+{
+  const heavy = { type: 'Ходовой', km: 25, up: 2000, down: 100, hours: 12, cover: 'snow', snow: 30, maxAlt: 4500, tdmin: -20, tdmax: -10 };
+  const mkS = (on, goal) => ({ simple: { ...defaultSimple(), on, n: 4 }, group: virtualGroup({ ...defaultSimple(), n: 4 }, { appetite: 1, shareM: 1, shareF: 0.8 }), days: [{ ...heavy }, { ...heavy, type: 'Днёвка' }], gear: { common: 20 }, drops: [], food: {}, prefs: { mode: 'std', kcalGoal: goal, restPct: 80 } });
+  const a = E.computeTrip(mkS(true, null), P);
+  ok('простой выезд без цели: берётся значение по умолчанию (simple_goal)', Math.abs(a.days[0].target / 4 - P.simple_goal) < 1e-6);
+  ok('простой выезд: днёвка по проценту, остальное не зависит от введённых км, снега и высоты', Math.abs(a.days[1].target / 4 - P.simple_goal * 0.8) < 1e-6 && a.days[0].d.km === undefined && a.days[0].d.maxAlt === undefined);
+  ok('простой выезд: потребность не раздувается данными маршрута', a.days[0].need / 4 < 2500);
+  const b = E.computeTrip(mkS(false, 3000), P);
+  ok('полноценный поход с целью: данные маршрута сохраняются в расчёте', b.days[0].d.km === 25 && b.days[0].need / 4 > 4000);
+  ok('простой выезд: предупреждений о покрытии нет', !a.warnings.some(w => /покрытие/.test(w)));
+}

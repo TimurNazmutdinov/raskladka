@@ -60,6 +60,7 @@ const PARAMS = [
   P('macro_f_high', 'alt', 'БЖУ выше: жиры', '', 0.7),
   P('macro_c_high', 'alt', 'БЖУ выше: углеводы', '', 5),
 
+  P('simple_goal', 'food', 'Цель по калориям для простого выезда (по умолчанию)', 'ккал/чел·день', 2800, 'Используется, если в простом выезде цель не задана. Ориентиры: 2500–3500 — обычный поход, 3500–4500 — тяжёлый; в экспедициях расход 4500–5400.'),
   P('cov_hungry', 'food', 'Покрытие: голодная', '%', 55),
   P('cov_std', 'food', 'Покрытие: стандарт', '%', 67),
   P('cov_full', 'food', 'Покрытие: сытая', '%', 80),
@@ -75,6 +76,7 @@ const PARAMS = [
   P('split_l', 'menu', 'Доля ккал: обед-перекус', '%', 25),
   P('split_d', 'menu', 'Доля ккал: ужин', '%', 30),
   P('split_s', 'menu', 'Доля ккал: каждый перекус', '%', 10, 'Доли по умолчанию для нового плана питания (завтрак, перекус, обед, перекус, ужин). Сумма по приёмам дня должна быть 100%; свой план питания — в «Питание и заброски».'),
+  P('kcal_cap', 'menu', 'Предел калорий на человека в день', 'ккал', 5500, 'Верхний разумный предел раскладки: в экспедициях по меченой воде расход 4500–5400 ккал/день. Если цель выше, меню собирается на этот предел, а в предупреждениях указан недобор.'),
   P('min_b', 'menu', 'Минимум завтрака', 'ккал/чел', 550, 'Ниже минимума блюдо не используется или порция увеличивается в пределах мин/макс.'),
   P('min_l', 'menu', 'Минимум обеда-перекуса', 'ккал/чел', 600),
   P('min_l_g', 'menu', 'Минимум обеда-перекуса по весу', 'г/чел', 150),
@@ -514,12 +516,13 @@ const waterLiters = (person, day, P) => person.weight * P.water_ml / 1000 + ((tm
 
 // Полный расчёт похода. Возвращает {days, summary, warnings}
 function computeTrip(trip, P) {
-  const g = trip.group.filter(p => p.weight && p.height && p.age), n = g.length, days = trip.days;
+  const simple = !!trip.simple?.on; // простой выезд: числа людей и дней и цель; км, набор, погода и пр. не учитываются, даже если введены раньше
+  const g = trip.group.filter(p => p.weight && p.height && p.age), n = g.length, days = simple ? trip.days.map(d => ({ type: isRest(d) ? d.type : 'Ходовой' })) : trip.days;
   const warnings = [];
   if (!n) return { days: [], summary: null, warnings: ['Добавьте участников с возрастом, ростом и весом.'] };
   if (!days.length) return { days: [], summary: null, warnings: ['Добавьте дни похода.'] };
   const cov = coverage(trip.prefs.mode, trip.prefs.custom, P) / 100;
-  const goal = trip.prefs.kcalGoal > 0 ? trip.prefs.kcalGoal : null, restK = (trip.prefs.restPct ?? 80) / 100; // цель по калориям задана вручную (ккал/чел/день)
+  const goal = trip.prefs.kcalGoal > 0 ? trip.prefs.kcalGoal : (simple ? P.simple_goal : null), restK = (trip.prefs.restPct ?? 80) / 100; // цель по калориям задана вручную (ккал/чел/день)
   const apf = appetiteFactors(days, P), shareSum = g.reduce((s, p) => s + (p.share || 1), 0);
   const out = days.map((d, i) => {
     const left = days.length - i + P.reserve_days;
@@ -722,6 +725,7 @@ function rebuild(trip) {
 
 function missing(trip) {
   const m = [];
+  if (trip.simple?.on) return trip.days.length ? m : ['нет дней: укажите число дней']; // простой выезд: нужны только число дней и людей
   if (!trip.days.length) return ['нет дней: задайте количество дней в «Параметрах похода» или загрузите трек'];
   if (trip.prefs?.kcalGoal > 0) return m; // задана цель по калориям: данные по дням (дата, км, набор, сброс, часы, температуры) необязательны
   if (!trip.plan?.start) m.push('дата начала');
@@ -1821,7 +1825,8 @@ const isHotLunch = d => d.meal === 'l' && !(d.cond || []).includes('any') && (d.
 function freshOk(p, i, flags) { return !p.fresh || i + 1 <= Math.round((p.shelf ?? 999) * (flags.hot ? 1 : 1.5)); }
 function candidates(ing, ctx) {
   const names = altNames(ing);
-  return names.map(n => ctx.byName.get(n)).filter(p => p && p.on && !ONION.test(p.name) && allowed(p, ctx.group) && freshOk(p, ctx.i, ctx.flags));
+  // лук и чеснок генератор сам не предлагает (варианты «А|Б»), но если блюдо прямо называет такой продукт, это часть рецепта — блюдо не отбрасываем
+  return names.map(n => ctx.byName.get(n)).filter(p => p && p.on && (names.length === 1 || !ONION.test(p.name)) && allowed(p, ctx.group) && freshOk(p, ctx.i, ctx.flags));
 }
 function pick(ing, ctx, salt) {
   const c = candidates(ing, ctx); if (!c.length) return null;
@@ -1871,6 +1876,24 @@ function usable(dish, m, ctx, perPerson, P, covK) {
 
 const mainGrain = (dish, ctx) => { const ing = dish.ing[0]; if (!ing) return null; const p = pick(ing, ctx, ctx.i); return p && p.cat === 'grain' ? p.id : null; };
 
+// Приём из нескольких блюд. Если ни одно блюдо в одиночку (даже с порцией до «макс» каждого продукта) не даёт нужных калорий,
+// берём самое «сытное» блюдо этого типа и добавляем другие, пока бюджет не набран (до 3 блюд). Порции подгоняются в тех же пределах мин/макс.
+function composeMeal(dishes, ctx, budget, salt, lunchP) {
+  const pool = dishes.filter(d => d.on && condOk(d, ctx.flags)).map(d => ({ d, mx: scale(d, ctx, 1e9, salt, 0) })).filter(x => x.mx).sort((a, b) => b.mx.kcal - a.mx.kcal);
+  if (!pool.length) return null;
+  const sel = []; let tot = 0;
+  for (const x of pool) { if (tot >= budget * 0.97 || sel.length === 3) break; sel.push(x); tot += x.mx.kcal; }
+  const parts = sel.map(x => ({ d: x.d, sc: scale(x.d, ctx, budget * x.mx.kcal / tot, salt, 0) })).filter(p => p.sc);
+  if (!parts.length) return null;
+  const items = parts.flatMap(p => p.sc.items);
+  if (lunchP && !lunchOk(items, lunchP)) return null;
+  return { parts, items, kcal: parts.reduce((s, p) => s + p.sc.kcal, 0), grams: parts.reduce((s, p) => s + p.sc.grams, 0) };
+}
+function composedEntry(cm, n, ctx) {
+  const parts = cm.parts.map(p => { const e = toEntry(p.d, p.sc, n, ctx); return { dish: p.d.id, name: p.d.name, items: e.items }; });
+  return { dish: cm.parts[0].d.id, dishes: cm.parts.map(p => p.d.id), name: cm.parts.map(p => p.d.name).join(' + '), parts, items: parts.flatMap(p => p.items), cook: Math.max(...cm.parts.map(p => p.d.cook || 0)), perKcal: Math.round(cm.kcal), perGrams: Math.round(cm.grams), pin: false };
+}
+
 function toEntry(dish, sc, n, ctx) {
   const items = sc.items.map(it => ({ pid: it.pid, g: it.skip ? Math.round(it.g * n * 100) / 100 : round5(it.g * n), unit: it.unit, skip: it.skip }));
   return { dish: dish.id, name: dish.name, items, cook: dish.cook || 0, perKcal: Math.round(sc.kcal), perGrams: Math.round(sc.grams), pin: false };
@@ -1888,7 +1911,8 @@ function buildMenu(trip, calc, mset, pset, P, old = null, seed = 0) {
   const slots = mealsOf(trip, P), personalSn = trip.prefs?.snacks === 'personal';
   const snSum = slots.filter(s => s.type === 's').reduce((a, s) => a + (+s.share || 0), 0), mainK = personalSn && snSum < 100 ? 100 / (100 - snSum) : 1;
   calc.days.forEach((cd, i) => {
-    const flags = dayFlags(cd, i, P), ctx = { i, flags, byName, group, n }, day = {}, used = new Set(), snackUsed = new Set(), perDay = cd.target / n;
+    const flags = dayFlags(cd, i, P), ctx = { i, flags, byName, group, n }, day = {}, used = new Set(), snackUsed = new Set(), perDay = Math.min(cd.target / n, P.kcal_cap); // цель выше разумного предела не раздувает порции
+    if (cd.target / n > P.kcal_cap) warnings.push(`День ${i + 1}: цель ${Math.round(cd.target / n)} ккал выше предела ${P.kcal_cap}: меню собрано на предел (предел меняется в Настройках → Меню)`);
     const adj = m => ((trip.adj?.meal?.[m] ?? 0) / 100 + 1) * ((trip.adj?.dayType?.[cd.d.type] ?? 0) / 100 + 1);
     slots.forEach((slot, mi) => {
       const m = slot.type, id = slot.id, budget = perDay * (+slot.share || 0) / 100 * adj(m) * (m === 's' ? 1 : mainK), prev = old?.days?.[i]?.[id];
@@ -1896,6 +1920,7 @@ function buildMenu(trip, calc, mset, pset, P, old = null, seed = 0) {
       if (prev?.empty) { day[id] = { empty: true, items: [] }; return; }
       if (m === 's' && personalSn) { day[id] = { items: [], name: 'Перекус (в личке)', personal: true }; return; }
       let dishes = mset.dishes.filter(d => d.meal === m);
+      if (prev?.pin && prev.dishes?.length > 1) { day[id] = prev; prev.dishes.forEach(did => { usage[did] = (usage[did] || 0) + 1; }); lastMeal[id] = prev.dish; return; }
       if (prev?.pin && prev.dish) { const d = dishes.find(x => x.id === prev.dish); const sc = d && scale(d, ctx, budget, i, 0); if (sc) { day[id] = { ...toEntry(d, sc, n, ctx), pin: true }; usage[d.id] = (usage[d.id] || 0) + 1; lastMeal[id] = d.id; const g = mainGrain(d, ctx); if (g) used.add(g); return; } }
       let cand = dishes.map(d => ({ d, sc: usable(d, m, ctx, budget, P, covK) })).filter(x => x.sc);
       if (!cand.length && m === 's') { day[id] = buildSnack(budget * n, n, ctx, prods, P, i + mi * 3, snackUsed); return; } // блюд-перекусов в наборе нет — собираем из продуктов
@@ -1912,10 +1937,14 @@ function buildMenu(trip, calc, mset, pset, P, old = null, seed = 0) {
         const sc = x => (usage[x.d.id] || 0) * 4 + (recent(x.d.id) ? 20 : 0) + h(x.d.id) + Math.abs(x.sc.kcal - budget) / 40 + ((flags.alt3000 && (m === 'l')) ? -carbShare(x.sc.items) * 12 : 0) - (trip.ratings?.[x.d.id] || 0) * 3;
         return sc(a) - sc(b);
       });
-      const best = cand[0];
+      let best = cand[0];
+      if (m !== 's' && (!best || best.sc.kcal < budget * 0.9)) { // одного блюда мало: увеличиваем порции в пределах мин/макс и добавляем блюда того же типа
+        const lp = m === 'l' && !(hotLunchAlways || flags.rest || flags.cold) ? P : null, cm = composeMeal(dishes, ctx, budget, i, lp) || (lp ? composeMeal(dishes, ctx, budget, i, null) : null);
+        if (cm && (!best || cm.kcal > best.sc.kcal * 1.05)) best = { d: cm.parts[0].d, sc: cm, cm };
+      }
       if (!best) { day[id] = { empty: true, items: [], none: true }; warnings.push(`День ${i + 1}, ${slotLabel(slots, id).toLowerCase()}: нет подходящего блюда в наборе (проверьте продукты и условия блюд)`); return; }
       usage[best.d.id] = (usage[best.d.id] || 0) + 1; lastMeal[id] = best.d.id; const g = mainGrain(best.d, ctx); if (g) used.add(g);
-      day[id] = toEntry(best.d, best.sc, n, ctx);
+      day[id] = best.cm ? composedEntry(best.cm, n, ctx) : toEntry(best.d, best.sc, n, ctx);
     });
     days.push(day);
   });
@@ -2244,6 +2273,9 @@ const F = {
     { k: 'noEat', label: 'Не едят / аллергии', help: 'Через запятую, например: орехи, грибы. Эти продукты в меню не попадут.' },
     { k: 'notes', label: 'Заметки о предпочтениях', help: 'Свободный текст, например: «1 чел — без глютена, 2 чел — не ест рыбу». Программа его не разбирает: заметки попадут в сводку и в информацию закупщикам.' },
   ],
+  goalS: [
+    { k: 'kcalGoal', label: 'Цель по калориям', type: 'number', unit: 'ккал/чел/день', help: 'Сколько ккал на человека в день должна давать раскладка. Пусто — берётся значение по умолчанию из Настроек (раздел «Раскладка»: 2800). Ориентиры: 2500–3500 обычный поход, 3500–4500 тяжёлый.' },
+  ],
   goal: [
     { k: 'kcalGoal', label: 'Цель по калориям', type: 'number', unit: 'ккал/чел/день', help: 'Если задана, она заменяет расчёт по нагрузке: каждый день цель одна и та же. Пусто — считать по нагрузке и режиму раскладки.' },
     { k: 'restPct', label: 'Днёвка', type: 'number', unit: '% от цели', show: p => p.kcalGoal > 0 },
@@ -2281,17 +2313,23 @@ const link = (v, t, s) => `<li><button data-go="${v}"><span>${t}</span><span cla
 const views = {
   main(_, ctx) {
     ensurePlan(trip);
-    const ds = daysSection(trip, save, ctx);
+    const simple = trip.simple.on, tfields = simple ? F.trip.filter(f => f.k === 'name') : F.trip, ds = simple ? null : daysSection(trip, save, ctx);
+    const modeHtml = `<div class="fld"><label>Тип расчёта</label><div class="ctl"><div class="seg"><button data-tmode="1" class="${simple ? 'on' : ''}">Простой выезд</button><button data-tmode="0" class="${simple ? '' : 'on'}">Полноценный поход</button></div></div></div>
+      <p class="muted small">${simple ? 'Задайте число людей, число дней и цель по калориям. Маршрут, погода, пол, вес, километры и набор высоты не нужны и в расчёте не учитываются.' : 'Подробный расчёт: маршрут (дни, км, набор, сброс, часы), погода, участники, снаряжение.'}</p>`;
+    const simpleHtml = simple ? `<div class="fld"><label>Число дней</label><div class="ctl"><input id="sdays" type="number" min="1" max="60" value="${trip.days.length || ''}" ${trip.track ? 'disabled' : ''}><span class="muted unit">дн</span></div></div>${trip.track ? '<p class="muted small">Дни взяты из GPX-трека: чтобы задать число вручную, переключитесь на «Полноценный поход» и уберите трек.</p>' : ''}<div id="sgoal">${form(F.goalS, trip.prefs)}</div>` : '';
     return {
-      html: `<h2>Поход</h2>
-        <div class="cols2"><div><div id="tf">${form(F.trip, trip)}</div>
+      html: `<h2>Поход</h2>${modeHtml}
+        <div class="cols2"><div><div id="tf">${form(tfields, trip)}</div>${simpleHtml}
         <div class="fld"><label>Набор продуктов</label><div class="ctl"><select id="sp">${prepo.list().map(s => `<option value="${s.id}"${s.id === trip.productSet ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select><button class="cfgbtn" id="cfgp">Настроить</button></div></div>
         <div class="fld"><label>Набор меню</label><div class="ctl"><select id="sm">${mrepo.list().map(s => `<option value="${s.id}"${s.id === trip.menuSet ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select><button class="cfgbtn" id="cfgm">Настроить</button></div></div>
-        <ul class="list">${link('group', 'Группа', `${trip.group.length} чел`)}${link('gear', 'Снаряжение', trip.gear.common ? trip.gear.common + ' кг' : '—')}
-        ${link('food', 'Питание и заброски', `${trip.food.hot} горячих`)}${link('prefs', 'Предпочтения', '')}</ul></div>
-        <div></div></div>${ds.html}`,
+        <ul class="list">${link('group', 'Группа', `${trip.group.length} чел`)}${simple ? '' : link('gear', 'Снаряжение', trip.gear.common ? trip.gear.common + ' кг' : '—')}
+        ${link('food', simple ? 'Питание и резерв' : 'Питание и заброски', simple ? '' : `${trip.food.hot} горячих`)}${link('prefs', 'Предпочтения', '')}</ul></div>
+        <div></div></div>${simple ? '' : ds.html}`,
       bind(root) {
-        bindForm(root.querySelector('#tf'), F.trip, trip, () => save(), () => ctx.rerender()); ds.bind(root);
+        bindForm(root.querySelector('#tf'), tfields, trip, () => save(), () => ctx.rerender()); if (ds) ds.bind(root);
+        root.querySelectorAll('[data-tmode]').forEach(b => b.onclick = () => { setSimpleMode(trip, b.dataset.tmode === '1', simpleDefs()); if (trip.simple.on && !trip.days.length) { ensurePlan(trip); trip.plan.n = trip.plan.n || 3; rebuild(trip); } save(); ctx.rerender(); });
+        root.querySelector('#sdays')?.addEventListener('change', e => { const v = Math.max(1, Math.min(60, parseInt(e.target.value) || 1)); ensurePlan(trip); trip.plan.n = v; rebuild(trip); save(); ctx.rerender(); });
+        if (simple) bindForm(root.querySelector('#sgoal'), F.goalS, trip.prefs, () => save(), () => ctx.rerender());
         root.querySelector('#cfgp').onclick = () => { focusProducts(trip.productSet || prepo.first()?.id); ctx.state.tab = 'products'; ctx.go(''); };
         root.querySelector('#cfgm').onclick = () => { focusMenu(trip.menuSet || mrepo.first()?.id); ctx.state.tab = 'menus'; ctx.go(''); };
         root.querySelector('#sp').onchange = e => { trip.productSet = e.target.value; const m = mrepo.list().find(x => x.productSetId === e.target.value); if (m && mrepo.get(trip.menuSet)?.productSetId !== e.target.value) trip.menuSet = m.id; save(); ctx.rerender(); };
@@ -2302,19 +2340,18 @@ const views = {
 
   group(_, ctx) {
     const on = trip.simple.on;
-    const mode = `<div class="fld"><label>Как считаем</label><div class="ctl"><div class="seg"><button data-gmode="0" class="${on ? '' : 'on'}">Подробно, по участникам</button><button data-gmode="1" class="${on ? 'on' : ''}">Просто, на группу</button></div></div></div>`;
+    const mode = `<p class="muted small">${on ? 'Простой выезд: достаточно числа людей. Тип расчёта меняется на экране «Поход».' : 'Полноценный поход: каждый участник считается отдельно. Тип расчёта меняется на экране «Поход».'}</p>`;
     const goal = `<h3>Цель по калориям</h3><div id="goalf">${form(F.goal, trip.prefs)}</div>`;
     return {
       html: `${back('', 'Поход')}<h2>Группа</h2>${mode}
         ${on ? `<p class="muted">Расчёт усреднённый: все участники одинаковые, пол чередуется. Чтобы учесть каждого, переключите на «Подробно».</p><div id="simplef">${form(F.simple, trip.simple)}</div>`
           : `${trip.group.length ? `<ul class="list">${trip.group.map((p, i) => `<li><button data-go="person" data-arg="${i}"><span>${esc(p.name) || 'Без имени'} · ${p.sex === 'F' ? 'Ж' : 'М'}${p.age ? ' · ' + p.age : ''}</span><span class="muted">${p.weight ? p.weight + ' кг' : ''} ›</span></button></li>`).join('')}</ul>` : '<p class="empty">Участников пока нет.</p>'}
         <button class="btn" id="add">Добавить участника</button>`}
-        ${goal}`,
+        ${on ? '' : goal}`,
       bind(root) {
-        root.querySelectorAll('[data-gmode]').forEach(b => b.onclick = () => { setSimpleMode(trip, b.dataset.gmode === '1', simpleDefs()); save(); ctx.rerender(); });
         if (on) bindForm(root.querySelector('#simplef'), F.simple, trip.simple, () => { rebuildSimple(trip, simpleDefs()); save(); }, () => ctx.rerender());
         else root.querySelector('#add').onclick = () => { trip.group.push(newPerson()); save(); ctx.go('person', trip.group.length - 1); };
-        bindForm(root.querySelector('#goalf'), F.goal, trip.prefs, k => { save(); if (k === 'kcalGoal') ctx.rerender(); }, () => ctx.rerender());
+        if (!on) bindForm(root.querySelector('#goalf'), F.goal, trip.prefs, k => { save(); if (k === 'kcalGoal') ctx.rerender(); }, () => ctx.rerender());
       },
     };
   },
@@ -2743,16 +2780,18 @@ const views = {
       root.querySelector('#xl').onclick = () => exportExcel(exportData()).catch(err => alert('Не удалось выгрузить: ' + err.message));
     };
     if (!calc.summary) return { html: `<h2>Расчёт</h2>${sel}${calc.warnings.map(w => `<p class="warnmsg">${esc(w)}</p>`).join('')}<p class="empty">Заполните вкладку «Поход»: участники с возрастом, ростом и весом и дни.</p>`, bind: bindSel };
-    const prods = pset.items, S = calc.summary;
+    const prods = pset.items, S = calc.summary, simpleOn = !!trip.simple?.on, tgAll = calc.days.reduce((s, d) => s + d.target, 0);
     const totG = menu.days.reduce((s, d) => s + menuGrams(d), 0), totK = menu.days.reduce((s, d) => s + menuKcal(d, prods), 0);
     const cov = S.need ? totK / S.need : 0, gpd = totG / S.n / S.days, covPct = Math.round(cov * 100);
     const problems = trip.planId ? [] : menuProblems(mset, pset), warns = [...calc.warnings, ...(menu.warnings || [])];
     if (problems.length) warns.push(`В наборе меню есть продукты, которых нет в наборе продуктов или они выключены: ${new Set(problems.map(p => p.ing.name)).size}. Откройте «Меню» → «Проверка».`);
     if (trip.planId && skippedCount(menu)) warns.push(`План применён как в файле: строк «не считается» (единицы не граммы, нет КБЖУ или продукта): ${skippedCount(menu)}. Они не входят в ккал и граммы.`);
-    if (covPct < P.cov_warn) warns.push(`Общее покрытие ${covPct}% ниже порога ${P.cov_warn}%`);
+    if (!simpleOn && covPct < P.cov_warn) warns.push(`Общее покрытие ${covPct}% ниже порога ${P.cov_warn}%`);
     const slider = Math.round(trip.prefs.mode === 'custom' ? (trip.prefs.custom ?? P.cov_custom) : { hungry: P.cov_hungry, std: P.cov_std, full: P.cov_full }[trip.prefs.mode]);
     const cards = calc.days.map((cd, i) => {
       const day = menu.days[i], k = menuKcal(day, prods), c = cd.need ? Math.round(k / cd.need * 100) : 0, d = cd.d;
+      if (simpleOn) { const pc = cd.target ? Math.round(k / cd.target * 100) : 0; return `<section class="dcard"><div class="dh"><b>День ${i + 1}${d.type === 'Ходовой' ? '' : ' · ' + esc(d.type)}</b><span class="muted">цель ${n0(cd.target / S.n)} ккал на человека</span></div>
+        <div class="nums"><div><span class="big">${n0(cd.target / S.n)}</span><span class="muted small">цель, ккал на чел.</span></div><div><span class="big">${n0(k / S.n)}</span><span class="muted small">даёт раскладка, ккал на чел.</span></div><div><span class="big ${pc < 90 || pc > 110 ? 'bad' : 'good'}">${pc}%</span><span class="muted small">от цели</span></div><div><span class="big">${n0(menuGrams(day))}</span><span class="muted small">граммов на группу</span></div></div></section>`; }
       return `<section class="dcard"><div class="dh"><b>День ${i + 1} · ${esc(d.type)}</b><span class="muted">${d.km ? d.km + ' км · ' : ''}${d.maxAlt ? Math.round(d.maxAlt) + ' м · ' : ''}${tempText(d)}</span></div>
         <div class="nums"><div><span class="big">${n0(cd.need)}</span><span class="muted small">потребность, ккал</span></div><div><span class="big">${n0(k)}</span><span class="muted small">даёт раскладка, ккал</span></div><div><span class="big ${c < P.cov_warn ? 'bad' : 'good'}">${c}%</span><span class="muted small">покрытие</span></div><div><span class="big">${n0(menuGrams(day))}</span><span class="muted small">граммов на группу</span></div></div>
         <p class="muted small">На человека: ${cd.per.map(x => `${esc(x.p.name || '—')} ${n0(x.total)}`).join(' · ')} ккал</p>${why(cd, P)}</section>`;
@@ -2761,17 +2800,17 @@ const views = {
     const grid = `<div class="tbl"><table class="dtable mgrid"><tr><th>День</th>${slots.map(s => `<th>${esc(slotLabel(slots, s.id))}</th>`).join('')}</tr>${menu.days.map((day, i) => `<tr><td><b>${i + 1}</b><br><span class="muted small">${esc(calc.days[i].d.type)}</span></td>${slots.map(s => s.id).map(m => { const e = day[m] || {}; return `<td class="mcell" data-m="${i}:${m}">${e.pin ? '📌 ' : ''}${esc(e.name || (e.empty ? 'убрано' : '—'))}${(e.items || []).length ? `<br><span class="muted small">${n0((e.items || []).reduce((a, it) => a + (it.skip ? 0 : it.g), 0))} г · ${n0(itemsKcal(e.items, prods))} ккал${(e.items || []).some(it => it.skip) ? ` · <span class="bad">не считается: ${(e.items || []).filter(it => it.skip).length} стр.</span>` : ''}</span>` : ''}</td>`; }).join('')}</tr>`).join('')}</table></div>`;
     return {
       html: `<h2>Расчёт</h2>${sel}
-        <div class="metrics"><div><span class="big">${S.days}</span><span class="muted small">дней</span></div><div><span class="big">${kg(totG)} кг</span><span class="muted small">вся раскладка</span></div><div><span class="big">${n0(gpd)} г</span><span class="muted small">на чел. в день</span></div><div><span class="big">${n0(totK / S.n / S.days)}</span><span class="muted small">ккал на чел.</span></div><div><span class="big ${covPct < P.cov_warn ? 'bad' : 'good'}">${covPct}%</span><span class="muted small">покрытие</span></div><div><span class="big">${kg(S.fuel)} кг</span><span class="muted small">газ</span></div></div>
+        <div class="metrics"><div><span class="big">${S.days}</span><span class="muted small">дней</span></div><div><span class="big">${kg(totG)} кг</span><span class="muted small">вся раскладка</span></div><div><span class="big">${n0(gpd)} г</span><span class="muted small">на чел. в день</span></div><div><span class="big">${n0(totK / S.n / S.days)}</span><span class="muted small">ккал на чел.</span></div>${simpleOn ? `<div><span class="big ${Math.abs(totK / tgAll - 1) > 0.1 ? 'bad' : 'good'}">${Math.round(totK / tgAll * 100)}%</span><span class="muted small">от цели</span></div>` : `<div><span class="big ${covPct < P.cov_warn ? 'bad' : 'good'}">${covPct}%</span><span class="muted small">покрытие</span></div>`}<div><span class="big">${kg(S.fuel)} кг</span><span class="muted small">газ</span></div></div>
         <p class="muted small">Ориентиры на человека в день: ${P.ref_hungry} г — голодно, ${P.ref_std} г — стандарт, ${P.ref_full} г — сытно. Оценки приблизительные и настраиваются.</p>
-        <div class="fld"><label>Сытость: <b id="sv">${slider}%</b> от потребности</label><div class="ctl"><input type="range" id="slide" min="40" max="100" value="${slider}" style="width:150px"></div></div>
+        ${simpleOn ? '' : `<div class="fld"><label>Сытость: <b id="sv">${slider}%</b> от потребности</label><div class="ctl"><input type="range" id="slide" min="40" max="100" value="${slider}" style="width:150px"></div></div>`}
         <div class="btnrow"><button class="btn" id="rebuild">Пересобрать меню</button><span class="muted small">Закреплённые блюда не меняются.</span></div>
         ${warns.length ? `<h3>Предупреждения</h3><ul class="warnlist">${warns.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
         <div class="cols2"><div><h3>Дни</h3>${cards}</div><div class="menupanel"><h3>Меню</h3>${grid}<p class="muted small">Нажмите на ячейку: заменить, закрепить или убрать блюдо.</p></div></div>`,
       bind(root) {
         bindSel(root);
         const sl = root.querySelector('#slide');
-        sl.oninput = () => { root.querySelector('#sv').textContent = sl.value + '%'; };
-        sl.onchange = () => { trip.prefs.mode = 'custom'; trip.prefs.custom = +sl.value; saveTrip(); ctx.rerender(); };
+        if (sl) { sl.oninput = () => { root.querySelector('#sv').textContent = sl.value + '%'; };
+        sl.onchange = () => { trip.prefs.mode = 'custom'; trip.prefs.custom = +sl.value; saveTrip(); ctx.rerender(); }; }
         root.querySelector('#rebuild').onclick = () => { ensure(true); ctx.rerender(); };
         root.querySelectorAll('.mcell').forEach(td => td.onclick = () => { const [i, m] = td.dataset.m.split(':'); mealDialog(+i, m, ctx); });
       },
@@ -3203,7 +3242,7 @@ const views = {
   features() {
     const L = [
       ['Запуск', 'Открывается двойным щелчком по Раскладка.html в Chrome или Edge, без сервера и установки. Данные хранятся в браузере; переносить между компьютерами можно через «Резервную копию».'],
-      ['Поход', 'GPX-трек: берутся только координаты и высоты. Окна «Параметры похода» (дата, число дней, днёвки и запасные дни, разбивка трека на дни поровну по нагрузке), «Условия» на весь поход и «День N» (двойной щелчок по строке таблицы). Профиль высот с перетаскиваемыми ночёвками. Группа, снаряжение, питание, заброски, предпочтения, «обед весь день». Выбор набора продуктов и набора меню. Кнопка «Рассчитать» находится на вкладке «Расчёт» и включается, когда заполнено всё обязательное.'],
+      ['Поход', 'GPX-трек: берутся только координаты и высоты. Окна «Параметры похода» (дата, число дней, днёвки и запасные дни, разбивка трека на дни поровну по нагрузке), «Условия» на весь поход и «День N» (двойной щелчок по строке таблицы). Профиль высот с перетаскиваемыми ночёвками. Тип расчёта: «Простой выезд» (число людей, дней и цель по калориям, остальное не нужно) или «Полноценный поход» (маршрут, погода, участники). Группа, снаряжение, питание, заброски, предпочтения, «обед весь день». Выбор набора продуктов и набора меню. Кнопка «Рассчитать» находится на вкладке «Расчёт» и включается, когда заполнено всё обязательное.'],
       ['Продукты', 'Вкладки-наборы (до 10): переименовать, дублировать, удалить, в файл, перетаскивание для порядка. «+ Набор»: пустой, копия, из файла .xlsx/.csv/.json с предпросмотром и ошибками построчно, вручную. Кнопки «Выбрать все», «Снять все выделение», «Инвертировать» и счётчик. Встроенные наборы «Базовый» и «Расширенный». Свой продукт: поиск КБЖУ в Open Food Facts, штрихкод, ввод вручную.'],
       ['Меню', 'Вкладки-наборы меню (до 10) с теми же действиями. Редактор блюда: продукты с граммами на человека (база, мин, макс), условия применения, время варки, включено/выключено. Проверка продуктов блюд по набору продуктов с вариантами «включить» и «заменить». Встроенные меню «Базовое» и «Расширенное», шаблон файла.'],
       ['Расчёт', 'Потребность каждого участника по дням: обмен, ходьба по Пандольфу, холод, высота, личные коэффициенты; «Почему столько?» показывает расчёт по шагам. Справа сетка меню день × приём пищи, замена, закрепление и удаление блюд, ползунок сытости. Наборы переключаются сразу. Предупреждения о покрытии, минимумах и недостающих продуктах. Выгрузка в Excel.'],
@@ -3321,7 +3360,7 @@ const views = {
     const list = PARAMS.filter(p => p.group === group && !p.hidden);
     return {
       html: `${back('settings')}<h2>Параметры расчёта</h2>
-        <div class="chips">${GROUPS.map(([g, n]) => `<button data-grp="${g}" class="${g === group ? 'on' : ''}">${n}</button>`).join('')}</div>
+        ${[['Простой выезд', ['food', 'menu', 'fuel']], ['Подробный расчёт (маршрут, погода, участники)', ['walk', 'cover', 'day', 'alt']]].map(([t, ids]) => `<p class="muted small"><b>${t}</b></p><div class="chips">${GROUPS.filter(([g]) => ids.includes(g)).map(([g, n]) => `<button data-grp="${g}" class="${g === group ? 'on' : ''}">${n}</button>`).join('')}</div>`).join('')}
         <p class="muted">Это оценочные значения. Изменённые помечены точкой.</p>
         ${list.map(p => `<div class="fld"><label>${esc(p.label)}${isChanged(p.id) ? ' <span class="dot">●</span>' : ''}${p.hint ? `<button class="q" data-help="${p.id}">?</button>` : ''}</label>
           <div class="ctl"><input type="number" inputmode="decimal" step="any" data-p="${p.id}" value="${getParam(p.id)}"><span class="muted unit">${esc(p.unit)}</span>

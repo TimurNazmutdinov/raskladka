@@ -60,7 +60,7 @@ export const views = {
     const list = PARAMS.filter(p => p.group === group && !p.hidden);
     return {
       html: `${back('settings')}<h2>Параметры расчёта</h2>
-        <div class="chips">${GROUPS.map(([g, n]) => `<button data-grp="${g}" class="${g === group ? 'on' : ''}">${n}</button>`).join('')}</div>
+        ${[['Простой выезд', ['food', 'menu', 'fuel']], ['Подробный расчёт (маршрут, погода, участники)', ['walk', 'cover', 'day', 'alt']]].map(([t, ids]) => `<p class="muted small"><b>${t}</b></p><div class="chips">${GROUPS.filter(([g]) => ids.includes(g)).map(([g, n]) => `<button data-grp="${g}" class="${g === group ? 'on' : ''}">${n}</button>`).join('')}</div>`).join('')}
         <p class="muted">Это оценочные значения. Изменённые помечены точкой.</p>
         ${list.map(p => `<div class="fld"><label>${esc(p.label)}${isChanged(p.id) ? ' <span class="dot">●</span>' : ''}${p.hint ? `<button class="q" data-help="${p.id}">?</button>` : ''}</label>
           <div class="ctl"><input type="number" inputmode="decimal" step="any" data-p="${p.id}" value="${getParam(p.id)}"><span class="muted unit">${esc(p.unit)}</span>

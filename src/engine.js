@@ -93,12 +93,13 @@ export const waterLiters = (person, day, P) => person.weight * P.water_ml / 1000
 
 // Полный расчёт похода. Возвращает {days, summary, warnings}
 export function computeTrip(trip, P) {
-  const g = trip.group.filter(p => p.weight && p.height && p.age), n = g.length, days = trip.days;
+  const simple = !!trip.simple?.on; // простой выезд: числа людей и дней и цель; км, набор, погода и пр. не учитываются, даже если введены раньше
+  const g = trip.group.filter(p => p.weight && p.height && p.age), n = g.length, days = simple ? trip.days.map(d => ({ type: isRest(d) ? d.type : 'Ходовой' })) : trip.days;
   const warnings = [];
   if (!n) return { days: [], summary: null, warnings: ['Добавьте участников с возрастом, ростом и весом.'] };
   if (!days.length) return { days: [], summary: null, warnings: ['Добавьте дни похода.'] };
   const cov = coverage(trip.prefs.mode, trip.prefs.custom, P) / 100;
-  const goal = trip.prefs.kcalGoal > 0 ? trip.prefs.kcalGoal : null, restK = (trip.prefs.restPct ?? 80) / 100; // цель по калориям задана вручную (ккал/чел/день)
+  const goal = trip.prefs.kcalGoal > 0 ? trip.prefs.kcalGoal : (simple ? P.simple_goal : null), restK = (trip.prefs.restPct ?? 80) / 100; // цель по калориям задана вручную (ккал/чел/день)
   const apf = appetiteFactors(days, P), shareSum = g.reduce((s, p) => s + (p.share || 1), 0);
   const out = days.map((d, i) => {
     const left = days.length - i + P.reserve_days;

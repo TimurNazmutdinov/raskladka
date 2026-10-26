@@ -119,16 +119,18 @@ export const views = {
       root.querySelector('#xl').onclick = () => exportExcel(exportData()).catch(err => alert('Не удалось выгрузить: ' + err.message));
     };
     if (!calc.summary) return { html: `<h2>Расчёт</h2>${sel}${calc.warnings.map(w => `<p class="warnmsg">${esc(w)}</p>`).join('')}<p class="empty">Заполните вкладку «Поход»: участники с возрастом, ростом и весом и дни.</p>`, bind: bindSel };
-    const prods = pset.items, S = calc.summary;
+    const prods = pset.items, S = calc.summary, simpleOn = !!trip.simple?.on, tgAll = calc.days.reduce((s, d) => s + d.target, 0);
     const totG = menu.days.reduce((s, d) => s + menuGrams(d), 0), totK = menu.days.reduce((s, d) => s + menuKcal(d, prods), 0);
     const cov = S.need ? totK / S.need : 0, gpd = totG / S.n / S.days, covPct = Math.round(cov * 100);
     const problems = trip.planId ? [] : menuProblems(mset, pset), warns = [...calc.warnings, ...(menu.warnings || [])];
     if (problems.length) warns.push(`В наборе меню есть продукты, которых нет в наборе продуктов или они выключены: ${new Set(problems.map(p => p.ing.name)).size}. Откройте «Меню» → «Проверка».`);
     if (trip.planId && skippedCount(menu)) warns.push(`План применён как в файле: строк «не считается» (единицы не граммы, нет КБЖУ или продукта): ${skippedCount(menu)}. Они не входят в ккал и граммы.`);
-    if (covPct < P.cov_warn) warns.push(`Общее покрытие ${covPct}% ниже порога ${P.cov_warn}%`);
+    if (!simpleOn && covPct < P.cov_warn) warns.push(`Общее покрытие ${covPct}% ниже порога ${P.cov_warn}%`);
     const slider = Math.round(trip.prefs.mode === 'custom' ? (trip.prefs.custom ?? P.cov_custom) : { hungry: P.cov_hungry, std: P.cov_std, full: P.cov_full }[trip.prefs.mode]);
     const cards = calc.days.map((cd, i) => {
       const day = menu.days[i], k = menuKcal(day, prods), c = cd.need ? Math.round(k / cd.need * 100) : 0, d = cd.d;
+      if (simpleOn) { const pc = cd.target ? Math.round(k / cd.target * 100) : 0; return `<section class="dcard"><div class="dh"><b>День ${i + 1}${d.type === 'Ходовой' ? '' : ' · ' + esc(d.type)}</b><span class="muted">цель ${n0(cd.target / S.n)} ккал на человека</span></div>
+        <div class="nums"><div><span class="big">${n0(cd.target / S.n)}</span><span class="muted small">цель, ккал на чел.</span></div><div><span class="big">${n0(k / S.n)}</span><span class="muted small">даёт раскладка, ккал на чел.</span></div><div><span class="big ${pc < 90 || pc > 110 ? 'bad' : 'good'}">${pc}%</span><span class="muted small">от цели</span></div><div><span class="big">${n0(menuGrams(day))}</span><span class="muted small">граммов на группу</span></div></div></section>`; }
       return `<section class="dcard"><div class="dh"><b>День ${i + 1} · ${esc(d.type)}</b><span class="muted">${d.km ? d.km + ' км · ' : ''}${d.maxAlt ? Math.round(d.maxAlt) + ' м · ' : ''}${tempText(d)}</span></div>
         <div class="nums"><div><span class="big">${n0(cd.need)}</span><span class="muted small">потребность, ккал</span></div><div><span class="big">${n0(k)}</span><span class="muted small">даёт раскладка, ккал</span></div><div><span class="big ${c < P.cov_warn ? 'bad' : 'good'}">${c}%</span><span class="muted small">покрытие</span></div><div><span class="big">${n0(menuGrams(day))}</span><span class="muted small">граммов на группу</span></div></div>
         <p class="muted small">На человека: ${cd.per.map(x => `${esc(x.p.name || '—')} ${n0(x.total)}`).join(' · ')} ккал</p>${why(cd, P)}</section>`;
@@ -137,17 +139,17 @@ export const views = {
     const grid = `<div class="tbl"><table class="dtable mgrid"><tr><th>День</th>${slots.map(s => `<th>${esc(slotLabel(slots, s.id))}</th>`).join('')}</tr>${menu.days.map((day, i) => `<tr><td><b>${i + 1}</b><br><span class="muted small">${esc(calc.days[i].d.type)}</span></td>${slots.map(s => s.id).map(m => { const e = day[m] || {}; return `<td class="mcell" data-m="${i}:${m}">${e.pin ? '📌 ' : ''}${esc(e.name || (e.empty ? 'убрано' : '—'))}${(e.items || []).length ? `<br><span class="muted small">${n0((e.items || []).reduce((a, it) => a + (it.skip ? 0 : it.g), 0))} г · ${n0(itemsKcal(e.items, prods))} ккал${(e.items || []).some(it => it.skip) ? ` · <span class="bad">не считается: ${(e.items || []).filter(it => it.skip).length} стр.</span>` : ''}</span>` : ''}</td>`; }).join('')}</tr>`).join('')}</table></div>`;
     return {
       html: `<h2>Расчёт</h2>${sel}
-        <div class="metrics"><div><span class="big">${S.days}</span><span class="muted small">дней</span></div><div><span class="big">${kg(totG)} кг</span><span class="muted small">вся раскладка</span></div><div><span class="big">${n0(gpd)} г</span><span class="muted small">на чел. в день</span></div><div><span class="big">${n0(totK / S.n / S.days)}</span><span class="muted small">ккал на чел.</span></div><div><span class="big ${covPct < P.cov_warn ? 'bad' : 'good'}">${covPct}%</span><span class="muted small">покрытие</span></div><div><span class="big">${kg(S.fuel)} кг</span><span class="muted small">газ</span></div></div>
+        <div class="metrics"><div><span class="big">${S.days}</span><span class="muted small">дней</span></div><div><span class="big">${kg(totG)} кг</span><span class="muted small">вся раскладка</span></div><div><span class="big">${n0(gpd)} г</span><span class="muted small">на чел. в день</span></div><div><span class="big">${n0(totK / S.n / S.days)}</span><span class="muted small">ккал на чел.</span></div>${simpleOn ? `<div><span class="big ${Math.abs(totK / tgAll - 1) > 0.1 ? 'bad' : 'good'}">${Math.round(totK / tgAll * 100)}%</span><span class="muted small">от цели</span></div>` : `<div><span class="big ${covPct < P.cov_warn ? 'bad' : 'good'}">${covPct}%</span><span class="muted small">покрытие</span></div>`}<div><span class="big">${kg(S.fuel)} кг</span><span class="muted small">газ</span></div></div>
         <p class="muted small">Ориентиры на человека в день: ${P.ref_hungry} г — голодно, ${P.ref_std} г — стандарт, ${P.ref_full} г — сытно. Оценки приблизительные и настраиваются.</p>
-        <div class="fld"><label>Сытость: <b id="sv">${slider}%</b> от потребности</label><div class="ctl"><input type="range" id="slide" min="40" max="100" value="${slider}" style="width:150px"></div></div>
+        ${simpleOn ? '' : `<div class="fld"><label>Сытость: <b id="sv">${slider}%</b> от потребности</label><div class="ctl"><input type="range" id="slide" min="40" max="100" value="${slider}" style="width:150px"></div></div>`}
         <div class="btnrow"><button class="btn" id="rebuild">Пересобрать меню</button><span class="muted small">Закреплённые блюда не меняются.</span></div>
         ${warns.length ? `<h3>Предупреждения</h3><ul class="warnlist">${warns.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
         <div class="cols2"><div><h3>Дни</h3>${cards}</div><div class="menupanel"><h3>Меню</h3>${grid}<p class="muted small">Нажмите на ячейку: заменить, закрепить или убрать блюдо.</p></div></div>`,
       bind(root) {
         bindSel(root);
         const sl = root.querySelector('#slide');
-        sl.oninput = () => { root.querySelector('#sv').textContent = sl.value + '%'; };
-        sl.onchange = () => { trip.prefs.mode = 'custom'; trip.prefs.custom = +sl.value; saveTrip(); ctx.rerender(); };
+        if (sl) { sl.oninput = () => { root.querySelector('#sv').textContent = sl.value + '%'; };
+        sl.onchange = () => { trip.prefs.mode = 'custom'; trip.prefs.custom = +sl.value; saveTrip(); ctx.rerender(); }; }
         root.querySelector('#rebuild').onclick = () => { ensure(true); ctx.rerender(); };
         root.querySelectorAll('.mcell').forEach(td => td.onclick = () => { const [i, m] = td.dataset.m.split(':'); mealDialog(+i, m, ctx); });
       },

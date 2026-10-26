@@ -28,7 +28,8 @@ const isHotLunch = d => d.meal === 'l' && !(d.cond || []).includes('any') && (d.
 function freshOk(p, i, flags) { return !p.fresh || i + 1 <= Math.round((p.shelf ?? 999) * (flags.hot ? 1 : 1.5)); }
 function candidates(ing, ctx) {
   const names = altNames(ing);
-  return names.map(n => ctx.byName.get(n)).filter(p => p && p.on && !ONION.test(p.name) && allowed(p, ctx.group) && freshOk(p, ctx.i, ctx.flags));
+  // лук и чеснок генератор сам не предлагает (варианты «А|Б»), но если блюдо прямо называет такой продукт, это часть рецепта — блюдо не отбрасываем
+  return names.map(n => ctx.byName.get(n)).filter(p => p && p.on && (names.length === 1 || !ONION.test(p.name)) && allowed(p, ctx.group) && freshOk(p, ctx.i, ctx.flags));
 }
 function pick(ing, ctx, salt) {
   const c = candidates(ing, ctx); if (!c.length) return null;
@@ -78,6 +79,24 @@ function usable(dish, m, ctx, perPerson, P, covK) {
 
 const mainGrain = (dish, ctx) => { const ing = dish.ing[0]; if (!ing) return null; const p = pick(ing, ctx, ctx.i); return p && p.cat === 'grain' ? p.id : null; };
 
+// Приём из нескольких блюд. Если ни одно блюдо в одиночку (даже с порцией до «макс» каждого продукта) не даёт нужных калорий,
+// берём самое «сытное» блюдо этого типа и добавляем другие, пока бюджет не набран (до 3 блюд). Порции подгоняются в тех же пределах мин/макс.
+function composeMeal(dishes, ctx, budget, salt, lunchP) {
+  const pool = dishes.filter(d => d.on && condOk(d, ctx.flags)).map(d => ({ d, mx: scale(d, ctx, 1e9, salt, 0) })).filter(x => x.mx).sort((a, b) => b.mx.kcal - a.mx.kcal);
+  if (!pool.length) return null;
+  const sel = []; let tot = 0;
+  for (const x of pool) { if (tot >= budget * 0.97 || sel.length === 3) break; sel.push(x); tot += x.mx.kcal; }
+  const parts = sel.map(x => ({ d: x.d, sc: scale(x.d, ctx, budget * x.mx.kcal / tot, salt, 0) })).filter(p => p.sc);
+  if (!parts.length) return null;
+  const items = parts.flatMap(p => p.sc.items);
+  if (lunchP && !lunchOk(items, lunchP)) return null;
+  return { parts, items, kcal: parts.reduce((s, p) => s + p.sc.kcal, 0), grams: parts.reduce((s, p) => s + p.sc.grams, 0) };
+}
+function composedEntry(cm, n, ctx) {
+  const parts = cm.parts.map(p => { const e = toEntry(p.d, p.sc, n, ctx); return { dish: p.d.id, name: p.d.name, items: e.items }; });
+  return { dish: cm.parts[0].d.id, dishes: cm.parts.map(p => p.d.id), name: cm.parts.map(p => p.d.name).join(' + '), parts, items: parts.flatMap(p => p.items), cook: Math.max(...cm.parts.map(p => p.d.cook || 0)), perKcal: Math.round(cm.kcal), perGrams: Math.round(cm.grams), pin: false };
+}
+
 function toEntry(dish, sc, n, ctx) {
   const items = sc.items.map(it => ({ pid: it.pid, g: it.skip ? Math.round(it.g * n * 100) / 100 : round5(it.g * n), unit: it.unit, skip: it.skip }));
   return { dish: dish.id, name: dish.name, items, cook: dish.cook || 0, perKcal: Math.round(sc.kcal), perGrams: Math.round(sc.grams), pin: false };
@@ -95,7 +114,8 @@ export function buildMenu(trip, calc, mset, pset, P, old = null, seed = 0) {
   const slots = mealsOf(trip, P), personalSn = trip.prefs?.snacks === 'personal';
   const snSum = slots.filter(s => s.type === 's').reduce((a, s) => a + (+s.share || 0), 0), mainK = personalSn && snSum < 100 ? 100 / (100 - snSum) : 1;
   calc.days.forEach((cd, i) => {
-    const flags = dayFlags(cd, i, P), ctx = { i, flags, byName, group, n }, day = {}, used = new Set(), snackUsed = new Set(), perDay = cd.target / n;
+    const flags = dayFlags(cd, i, P), ctx = { i, flags, byName, group, n }, day = {}, used = new Set(), snackUsed = new Set(), perDay = Math.min(cd.target / n, P.kcal_cap); // цель выше разумного предела не раздувает порции
+    if (cd.target / n > P.kcal_cap) warnings.push(`День ${i + 1}: цель ${Math.round(cd.target / n)} ккал выше предела ${P.kcal_cap}: меню собрано на предел (предел меняется в Настройках → Меню)`);
     const adj = m => ((trip.adj?.meal?.[m] ?? 0) / 100 + 1) * ((trip.adj?.dayType?.[cd.d.type] ?? 0) / 100 + 1);
     slots.forEach((slot, mi) => {
       const m = slot.type, id = slot.id, budget = perDay * (+slot.share || 0) / 100 * adj(m) * (m === 's' ? 1 : mainK), prev = old?.days?.[i]?.[id];
@@ -103,6 +123,7 @@ export function buildMenu(trip, calc, mset, pset, P, old = null, seed = 0) {
       if (prev?.empty) { day[id] = { empty: true, items: [] }; return; }
       if (m === 's' && personalSn) { day[id] = { items: [], name: 'Перекус (в личке)', personal: true }; return; }
       let dishes = mset.dishes.filter(d => d.meal === m);
+      if (prev?.pin && prev.dishes?.length > 1) { day[id] = prev; prev.dishes.forEach(did => { usage[did] = (usage[did] || 0) + 1; }); lastMeal[id] = prev.dish; return; }
       if (prev?.pin && prev.dish) { const d = dishes.find(x => x.id === prev.dish); const sc = d && scale(d, ctx, budget, i, 0); if (sc) { day[id] = { ...toEntry(d, sc, n, ctx), pin: true }; usage[d.id] = (usage[d.id] || 0) + 1; lastMeal[id] = d.id; const g = mainGrain(d, ctx); if (g) used.add(g); return; } }
       let cand = dishes.map(d => ({ d, sc: usable(d, m, ctx, budget, P, covK) })).filter(x => x.sc);
       if (!cand.length && m === 's') { day[id] = buildSnack(budget * n, n, ctx, prods, P, i + mi * 3, snackUsed); return; } // блюд-перекусов в наборе нет — собираем из продуктов
@@ -119,10 +140,14 @@ export function buildMenu(trip, calc, mset, pset, P, old = null, seed = 0) {
         const sc = x => (usage[x.d.id] || 0) * 4 + (recent(x.d.id) ? 20 : 0) + h(x.d.id) + Math.abs(x.sc.kcal - budget) / 40 + ((flags.alt3000 && (m === 'l')) ? -carbShare(x.sc.items) * 12 : 0) - (trip.ratings?.[x.d.id] || 0) * 3;
         return sc(a) - sc(b);
       });
-      const best = cand[0];
+      let best = cand[0];
+      if (m !== 's' && (!best || best.sc.kcal < budget * 0.9)) { // одного блюда мало: увеличиваем порции в пределах мин/макс и добавляем блюда того же типа
+        const lp = m === 'l' && !(hotLunchAlways || flags.rest || flags.cold) ? P : null, cm = composeMeal(dishes, ctx, budget, i, lp) || (lp ? composeMeal(dishes, ctx, budget, i, null) : null);
+        if (cm && (!best || cm.kcal > best.sc.kcal * 1.05)) best = { d: cm.parts[0].d, sc: cm, cm };
+      }
       if (!best) { day[id] = { empty: true, items: [], none: true }; warnings.push(`День ${i + 1}, ${slotLabel(slots, id).toLowerCase()}: нет подходящего блюда в наборе (проверьте продукты и условия блюд)`); return; }
       usage[best.d.id] = (usage[best.d.id] || 0) + 1; lastMeal[id] = best.d.id; const g = mainGrain(best.d, ctx); if (g) used.add(g);
-      day[id] = toEntry(best.d, best.sc, n, ctx);
+      day[id] = best.cm ? composedEntry(best.cm, n, ctx) : toEntry(best.d, best.sc, n, ctx);
     });
     days.push(day);
   });

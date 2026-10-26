@@ -53,6 +53,9 @@ const F = {
     { k: 'noEat', label: 'Не едят / аллергии', help: 'Через запятую, например: орехи, грибы. Эти продукты в меню не попадут.' },
     { k: 'notes', label: 'Заметки о предпочтениях', help: 'Свободный текст, например: «1 чел — без глютена, 2 чел — не ест рыбу». Программа его не разбирает: заметки попадут в сводку и в информацию закупщикам.' },
   ],
+  goalS: [
+    { k: 'kcalGoal', label: 'Цель по калориям', type: 'number', unit: 'ккал/чел/день', help: 'Сколько ккал на человека в день должна давать раскладка. Пусто — берётся значение по умолчанию из Настроек (раздел «Раскладка»: 2800). Ориентиры: 2500–3500 обычный поход, 3500–4500 тяжёлый.' },
+  ],
   goal: [
     { k: 'kcalGoal', label: 'Цель по калориям', type: 'number', unit: 'ккал/чел/день', help: 'Если задана, она заменяет расчёт по нагрузке: каждый день цель одна и та же. Пусто — считать по нагрузке и режиму раскладки.' },
     { k: 'restPct', label: 'Днёвка', type: 'number', unit: '% от цели', show: p => p.kcalGoal > 0 },
@@ -90,17 +93,23 @@ const link = (v, t, s) => `<li><button data-go="${v}"><span>${t}</span><span cla
 export const views = {
   main(_, ctx) {
     ensurePlan(trip);
-    const ds = daysSection(trip, save, ctx);
+    const simple = trip.simple.on, tfields = simple ? F.trip.filter(f => f.k === 'name') : F.trip, ds = simple ? null : daysSection(trip, save, ctx);
+    const modeHtml = `<div class="fld"><label>Тип расчёта</label><div class="ctl"><div class="seg"><button data-tmode="1" class="${simple ? 'on' : ''}">Простой выезд</button><button data-tmode="0" class="${simple ? '' : 'on'}">Полноценный поход</button></div></div></div>
+      <p class="muted small">${simple ? 'Задайте число людей, число дней и цель по калориям. Маршрут, погода, пол, вес, километры и набор высоты не нужны и в расчёте не учитываются.' : 'Подробный расчёт: маршрут (дни, км, набор, сброс, часы), погода, участники, снаряжение.'}</p>`;
+    const simpleHtml = simple ? `<div class="fld"><label>Число дней</label><div class="ctl"><input id="sdays" type="number" min="1" max="60" value="${trip.days.length || ''}" ${trip.track ? 'disabled' : ''}><span class="muted unit">дн</span></div></div>${trip.track ? '<p class="muted small">Дни взяты из GPX-трека: чтобы задать число вручную, переключитесь на «Полноценный поход» и уберите трек.</p>' : ''}<div id="sgoal">${form(F.goalS, trip.prefs)}</div>` : '';
     return {
-      html: `<h2>Поход</h2>
-        <div class="cols2"><div><div id="tf">${form(F.trip, trip)}</div>
+      html: `<h2>Поход</h2>${modeHtml}
+        <div class="cols2"><div><div id="tf">${form(tfields, trip)}</div>${simpleHtml}
         <div class="fld"><label>Набор продуктов</label><div class="ctl"><select id="sp">${prepo.list().map(s => `<option value="${s.id}"${s.id === trip.productSet ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select><button class="cfgbtn" id="cfgp">Настроить</button></div></div>
         <div class="fld"><label>Набор меню</label><div class="ctl"><select id="sm">${mrepo.list().map(s => `<option value="${s.id}"${s.id === trip.menuSet ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select><button class="cfgbtn" id="cfgm">Настроить</button></div></div>
-        <ul class="list">${link('group', 'Группа', `${trip.group.length} чел`)}${link('gear', 'Снаряжение', trip.gear.common ? trip.gear.common + ' кг' : '—')}
-        ${link('food', 'Питание и заброски', `${trip.food.hot} горячих`)}${link('prefs', 'Предпочтения', '')}</ul></div>
-        <div></div></div>${ds.html}`,
+        <ul class="list">${link('group', 'Группа', `${trip.group.length} чел`)}${simple ? '' : link('gear', 'Снаряжение', trip.gear.common ? trip.gear.common + ' кг' : '—')}
+        ${link('food', simple ? 'Питание и резерв' : 'Питание и заброски', simple ? '' : `${trip.food.hot} горячих`)}${link('prefs', 'Предпочтения', '')}</ul></div>
+        <div></div></div>${simple ? '' : ds.html}`,
       bind(root) {
-        bindForm(root.querySelector('#tf'), F.trip, trip, () => save(), () => ctx.rerender()); ds.bind(root);
+        bindForm(root.querySelector('#tf'), tfields, trip, () => save(), () => ctx.rerender()); if (ds) ds.bind(root);
+        root.querySelectorAll('[data-tmode]').forEach(b => b.onclick = () => { setSimpleMode(trip, b.dataset.tmode === '1', simpleDefs()); if (trip.simple.on && !trip.days.length) { ensurePlan(trip); trip.plan.n = trip.plan.n || 3; rebuild(trip); } save(); ctx.rerender(); });
+        root.querySelector('#sdays')?.addEventListener('change', e => { const v = Math.max(1, Math.min(60, parseInt(e.target.value) || 1)); ensurePlan(trip); trip.plan.n = v; rebuild(trip); save(); ctx.rerender(); });
+        if (simple) bindForm(root.querySelector('#sgoal'), F.goalS, trip.prefs, () => save(), () => ctx.rerender());
         root.querySelector('#cfgp').onclick = () => { focusProducts(trip.productSet || prepo.first()?.id); ctx.state.tab = 'products'; ctx.go(''); };
         root.querySelector('#cfgm').onclick = () => { focusMenu(trip.menuSet || mrepo.first()?.id); ctx.state.tab = 'menus'; ctx.go(''); };
         root.querySelector('#sp').onchange = e => { trip.productSet = e.target.value; const m = mrepo.list().find(x => x.productSetId === e.target.value); if (m && mrepo.get(trip.menuSet)?.productSetId !== e.target.value) trip.menuSet = m.id; save(); ctx.rerender(); };
@@ -111,19 +120,18 @@ export const views = {
 
   group(_, ctx) {
     const on = trip.simple.on;
-    const mode = `<div class="fld"><label>Как считаем</label><div class="ctl"><div class="seg"><button data-gmode="0" class="${on ? '' : 'on'}">Подробно, по участникам</button><button data-gmode="1" class="${on ? 'on' : ''}">Просто, на группу</button></div></div></div>`;
+    const mode = `<p class="muted small">${on ? 'Простой выезд: достаточно числа людей. Тип расчёта меняется на экране «Поход».' : 'Полноценный поход: каждый участник считается отдельно. Тип расчёта меняется на экране «Поход».'}</p>`;
     const goal = `<h3>Цель по калориям</h3><div id="goalf">${form(F.goal, trip.prefs)}</div>`;
     return {
       html: `${back('', 'Поход')}<h2>Группа</h2>${mode}
         ${on ? `<p class="muted">Расчёт усреднённый: все участники одинаковые, пол чередуется. Чтобы учесть каждого, переключите на «Подробно».</p><div id="simplef">${form(F.simple, trip.simple)}</div>`
           : `${trip.group.length ? `<ul class="list">${trip.group.map((p, i) => `<li><button data-go="person" data-arg="${i}"><span>${esc(p.name) || 'Без имени'} · ${p.sex === 'F' ? 'Ж' : 'М'}${p.age ? ' · ' + p.age : ''}</span><span class="muted">${p.weight ? p.weight + ' кг' : ''} ›</span></button></li>`).join('')}</ul>` : '<p class="empty">Участников пока нет.</p>'}
         <button class="btn" id="add">Добавить участника</button>`}
-        ${goal}`,
+        ${on ? '' : goal}`,
       bind(root) {
-        root.querySelectorAll('[data-gmode]').forEach(b => b.onclick = () => { setSimpleMode(trip, b.dataset.gmode === '1', simpleDefs()); save(); ctx.rerender(); });
         if (on) bindForm(root.querySelector('#simplef'), F.simple, trip.simple, () => { rebuildSimple(trip, simpleDefs()); save(); }, () => ctx.rerender());
         else root.querySelector('#add').onclick = () => { trip.group.push(newPerson()); save(); ctx.go('person', trip.group.length - 1); };
-        bindForm(root.querySelector('#goalf'), F.goal, trip.prefs, k => { save(); if (k === 'kcalGoal') ctx.rerender(); }, () => ctx.rerender());
+        if (!on) bindForm(root.querySelector('#goalf'), F.goal, trip.prefs, k => { save(); if (k === 'kcalGoal') ctx.rerender(); }, () => ctx.rerender());
       },
     };
   },

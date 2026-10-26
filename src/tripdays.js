@@ -50,6 +50,7 @@ export function rebuild(trip) {
 
 export function missing(trip) {
   const m = [];
+  if (trip.simple?.on) return trip.days.length ? m : ['нет дней: укажите число дней']; // простой выезд: нужны только число дней и людей
   if (!trip.days.length) return ['нет дней: задайте количество дней в «Параметрах похода» или загрузите трек'];
   if (trip.prefs?.kcalGoal > 0) return m; // задана цель по калориям: данные по дням (дата, км, набор, сброс, часы, температуры) необязательны
   if (!trip.plan?.start) m.push('дата начала');
