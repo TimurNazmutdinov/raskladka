@@ -113,7 +113,7 @@ export function computeTrip(trip, P) {
     return { i, d, per, need, target, grams: tgtGrams, cover: need ? target / need : 0, appetite: apf[i], fuel: fuelPerPerson(d, P) * n, water: per.reduce((s, x) => s + waterLiters(x.p, d, P), 0), mac: macros(target / n, d.maxAlt || 0, P) };
   });
   const tot = out.reduce((s, x) => s + x.target, 0), totNeed = out.reduce((s, x) => s + x.need, 0), gramsAll = out.reduce((s, x) => s + x.grams, 0);
-  out.forEach(x => { if (x.cover * 100 < P.cov_warn - 0.01) warnings.push(`День ${x.i + 1}: покрытие ${Math.round(x.cover * 100)}% ниже порога ${P.cov_warn}%`); });
+  out.forEach(x => { if (goal && !(isRest(x.d) || (x.d.km && x.d.hours))) return; /* цель задана, данных о нагрузке нет — покрытие не оцениваем */ if (x.cover * 100 < P.cov_warn - 0.01) warnings.push(`День ${x.i + 1}: покрытие ${Math.round(x.cover * 100)}% ниже порога ${P.cov_warn}%`); });
   g.forEach(p => {
     const lim = p.sex === 'F' ? trip.gear.maxF : trip.gear.maxM;
     const x = out[0].per.find(q => q.p === p);

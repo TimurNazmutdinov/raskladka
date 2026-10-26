@@ -51,6 +51,7 @@ export function rebuild(trip) {
 export function missing(trip) {
   const m = [];
   if (!trip.days.length) return ['нет дней: задайте количество дней в «Параметрах похода» или загрузите трек'];
+  if (trip.prefs?.kcalGoal > 0) return m; // задана цель по калориям: данные по дням (дата, км, набор, сброс, часы, температуры) необязательны
   if (!trip.plan?.start) m.push('дата начала');
   trip.days.forEach((d, i) => {
     const w = [];
@@ -157,6 +158,7 @@ function openDay(trip, i, save, ctx) {
 export function daysSection(trip, save, ctx) {
   ensurePlan(trip);
   const tr = trip.track, miss = missing(trip);
+  const goalSet = trip.prefs?.kcalGoal > 0, rq = c => (!goalSet && c ? 'req' : ''); // подсветка «обязательно» только если цели по калориям нет
   let prof = '';
   if (tr) {
     const T = G.prep(tr, P()), tot = G.totalStats(T), noEle = !G.hasEle(tr.pts);
@@ -170,14 +172,14 @@ export function daysSection(trip, save, ctx) {
       <div class="fld"><label>Километры ночёвок (можно тянуть маркеры на профиле)</label><div class="ctl"><input id="kms" style="width:240px" value="${tr.cuts.map(r1).join(', ')}"></div></div>`;
   }
   const hdr = '<tr><th>№</th><th>Дата</th><th>Тип</th><th>км</th><th>Набор</th><th>Сброс</th><th>Часы</th><th>Темп. днём/ночью</th><th>Осадки</th><th>Ночёвка, м</th><th></th></tr>';
-  const rows = trip.days.map((d, i) => `<tr data-d="${i}"><td>${i + 1}</td><td class="${!d.date ? 'req' : ''}">${fmtDate(d.date) || '—'}</td><td class="${!d.type ? 'req' : ''}">${esc(d.type)}</td>${['km', 'up', 'down', 'hours'].map(k => d.rest ? '<td class="rest">—</td>' : `<td class="${d[k] == null ? 'req' : ''}">${d[k] ?? ''}</td>`).join('')}<td class="${bad(d, 'td') || bad(d, 'tn') ? 'req' : ''}">${bad(d, 'td') && bad(d, 'tn') ? '' : tempText(d)}</td><td>${{ rain: 'дождь', snow: 'снег' }[d.precip] || 'нет'}</td><td>${d.nightAlt ?? ''}</td><td><button class="mini" data-e="${i}">Изменить</button></td></tr>`).join('');
+  const rows = trip.days.map((d, i) => `<tr data-d="${i}"><td>${i + 1}</td><td class="${rq(!d.date)}">${fmtDate(d.date) || '—'}</td><td class="${rq(!d.type)}">${esc(d.type)}</td>${['km', 'up', 'down', 'hours'].map(k => d.rest ? '<td class="rest">—</td>' : `<td class="${rq(d[k] == null)}">${d[k] ?? ''}</td>`).join('')}<td class="${rq(bad(d, 'td') || bad(d, 'tn'))}">${bad(d, 'td') && bad(d, 'tn') ? '' : tempText(d)}</td><td>${{ rain: 'дождь', snow: 'снег' }[d.precip] || 'нет'}</td><td>${d.nightAlt ?? ''}</td><td><button class="mini" data-e="${i}">Изменить</button></td></tr>`).join('');
   return {
     html: `<div class="btnrow"><label class="btn filebtn2">${tr ? 'Заменить GPX-трек' : 'Загрузить GPX-трек'}<input type="file" id="file" accept=".gpx,application/gpx+xml" multiple hidden></label>
       <button class="btn ghost" id="bparams">Параметры похода</button><button class="btn ghost" id="bcond">Условия</button>${tr ? '<button class="btn ghost" id="bclear">Убрать трек</button>' : ''}</div>
       <p class="warnmsg">${esc(msg.text)}</p>${tr ? '' : '<p class="muted">Загрузите трек (нужны только координаты и высоты) или задайте количество дней в «Параметрах похода» и введите дни вручную.</p>'}
       ${prof}
       <h3>Дни${trip.days.length ? `: ${trip.days.length}` : ''}</h3>
-      ${trip.days.length ? `<div class="tbl"><table class="dtable">${hdr}${rows}</table></div><p class="muted small">Двойной щелчок по строке открывает окно дня. Подсвеченное обязательно заполнить.</p>` : '<p class="empty">Дней пока нет.</p>'}
+      ${trip.days.length ? `<div class="tbl"><table class="dtable">${hdr}${rows}</table></div><p class="muted small">Двойной щелчок по строке открывает окно дня. ${goalSet ? 'Цель по калориям задана: данные по дням необязательны, их можно ввести для уточнения расчёта.' : 'Подсвеченное обязательно заполнить.'}</p>` : '<p class="empty">Дней пока нет.</p>'}
       <div class="btnrow"><button class="btn" id="calc" ${miss.length ? 'disabled' : ''}>Рассчитать</button></div>
       ${miss.length ? `<p class="warnmsg small">Не хватает: ${esc(miss.join('; '))}</p>` : ''}`,
     bind(root) {
